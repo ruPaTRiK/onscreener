@@ -2,8 +2,8 @@ import socket
 import json
 from PyQt6.QtCore import QThread, pyqtSignal
 
-# IP СЕРВЕРА (Можно менять)
-DEFAULT_SERVER_IP = "127.0.0.1"
+# IP СЕРВЕРА
+DEFAULT_SERVER_IP = "203.31.40.32"
 DEFAULT_SERVER_PORT = 5555
 
 

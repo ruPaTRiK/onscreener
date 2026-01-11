@@ -47,8 +47,8 @@ class GameCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.is_selected = False
 
-        self.default_style = self._get_style("#444")
-        self.selected_style = self._get_style("#2ecc71")  # Зеленая рамка
+        self.default_style = self._get_style("#393646")
+        self.selected_style = self._get_style("#2ed573")  # Зеленая рамка
 
         self.setStyleSheet(self.default_style)
 
@@ -57,7 +57,7 @@ class GameCard(QFrame):
         title = QLabel(game_data["title"])
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        title.setStyleSheet("background-color: rgba(0,0,0,150); color: white; border-radius: 5px;")
+        title.setStyleSheet("background-color: rgba(0,0,0,150); color: white; border-radius: 5px; border: none; padding: 5px 0;")
         layout.addWidget(title)
 
     def _get_style(self, border_color):
@@ -107,6 +107,56 @@ class Launcher(OverlayWindow):
     def init_ui(self):
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
+
+        scrollbar_style = """
+                    /* ВЕРТИКАЛЬНЫЙ СКРОЛЛБАР */
+                    QScrollBar:vertical {
+                        border: none;
+                        background: rgba(0, 0, 0, 30); /* Прозрачный темный фон трека */
+                        width: 10px;                   /* Тонкий */
+                        margin: 0px 0px 0px 0px;
+                    }
+                    /* Ползунок */
+                    QScrollBar::handle:vertical {
+                        background: rgba(255, 255, 255, 50); /* Полупрозрачный белый */
+                        min-height: 20px;
+                        border-radius: 5px;            /* Закругления */
+                    }
+                    /* Ползунок при наведении */
+                    QScrollBar::handle:vertical:hover {
+                        background: rgba(255, 255, 255, 100); /* Ярче */
+                    }
+                    /* Скрываем кнопки вверх/вниз */
+                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                        height: 0px;
+                    }
+                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                        background: none;
+                    }
+
+                    /* ГОРИЗОНТАЛЬНЫЙ СКРОЛЛБАР */
+                    QScrollBar:horizontal {
+                        border: none;
+                        background: rgba(0, 0, 0, 30);
+                        height: 10px;
+                        margin: 0px 0px 0px 0px;
+                    }
+                    QScrollBar::handle:horizontal {
+                        background: rgba(255, 255, 255, 50);
+                        min-width: 20px;
+                        border-radius: 5px;
+                    }
+                    QScrollBar::handle:horizontal:hover {
+                        background: rgba(255, 255, 255, 100);
+                    }
+                    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+                        width: 0px;
+                    }
+                    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+                        background: none;
+                    }
+                """
+        self.setStyleSheet(scrollbar_style)
 
         self.main_h_layout = QHBoxLayout(self.central_widget)
         self.main_h_layout.setContentsMargins(0, 0, 0, 0)
@@ -454,7 +504,7 @@ class Launcher(OverlayWindow):
             del self.running_games[window_id]
 
     def paintEvent(self, event):
-        self.central_widget.setStyleSheet("background-color: rgba(30, 30, 30, 245); border-radius: 15px;")
+        self.central_widget.setStyleSheet("background-color: #4F4557; border-radius: 15px;")
         super().paintEvent(event)
 
     def resizeEvent(self, event):

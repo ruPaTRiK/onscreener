@@ -22,7 +22,7 @@ class ToastNotification(QWidget):
         self.setObjectName("ToastWidget")
         self.setStyleSheet(f"""
             #ToastWidget {{
-                background-color: #2c3e50;
+                background-color: #393646;
                 border-left: 5px solid {accent_color};
                 border-radius: 5px;
             }}
