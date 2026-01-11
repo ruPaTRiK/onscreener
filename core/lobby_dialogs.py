@@ -8,13 +8,13 @@ class CreateLobbyDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Создать комнату")
         self.setFixedSize(300, 200)
-        self.setStyleSheet("background-color: #333; color: white;")
+        self.setStyleSheet("background-color: #1E1E2E; color: #EAEAEA;")
 
         layout = QVBoxLayout(self)
 
         self.name_inp = QLineEdit("Игровая комната")
         self.name_inp.setPlaceholderText("Название лобби")
-        self.name_inp.setStyleSheet("padding: 5px; border: 1px solid #555;")
+        self.name_inp.setStyleSheet("padding: 5px; border: 1px solid #3E3E50; border-radius: 7px;")
         layout.addWidget(QLabel("Название:"))
         layout.addWidget(self.name_inp)
 
@@ -25,17 +25,17 @@ class CreateLobbyDialog(QDialog):
         self.pass_inp = QLineEdit()
         self.pass_inp.setPlaceholderText("Пароль")
         self.pass_inp.setEchoMode(QLineEdit.EchoMode.Password)
-        self.pass_inp.setStyleSheet("padding: 5px; border: 1px solid #555;")
+        self.pass_inp.setStyleSheet("padding: 5px; border: 1px solid #3E3E50; border-radius: 7px;")
         self.pass_inp.setEnabled(False)
         layout.addWidget(self.pass_inp)
 
         btn_layout = QHBoxLayout()
         btn_ok = QPushButton("Создать")
-        btn_ok.setStyleSheet("background: #27ae60; padding: 5px;")
+        btn_ok.setStyleSheet("background: #2ECC71; padding: 5px;")
         btn_ok.clicked.connect(self.accept)
 
         btn_cancel = QPushButton("Отмена")
-        btn_cancel.setStyleSheet("background: #c0392b; padding: 5px;")
+        btn_cancel.setStyleSheet("background: #E74C3C; padding: 5px;")
         btn_cancel.clicked.connect(self.reject)
 
         btn_layout.addWidget(btn_ok)
@@ -58,17 +58,17 @@ class PasswordDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Введите пароль")
         self.setFixedSize(250, 100)
-        self.setStyleSheet("background-color: #333; color: white;")
+        self.setStyleSheet("background-color: #1E1E2E; color: #EAEAEA;")
 
         layout = QVBoxLayout(self)
         self.inp = QLineEdit()
         self.inp.setEchoMode(QLineEdit.EchoMode.Password)
-        self.inp.setStyleSheet("padding: 5px; border: 1px solid #555;")
+        self.inp.setStyleSheet("padding: 5px; border: 1px solid #3E3E50; border-radius: 7px;")
         layout.addWidget(QLabel("Пароль комнаты:"))
         layout.addWidget(self.inp)
 
         btn = QPushButton("Войти")
-        btn.setStyleSheet("background: #2980b9; padding: 5px;")
+        btn.setStyleSheet("background: #2ECC71; padding: 5px;")
         btn.clicked.connect(self.accept)
         layout.addWidget(btn)
 

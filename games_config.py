@@ -26,7 +26,7 @@ GAMES_CONFIG = [
         "title": "Крестики-Нолики",
         "class": TicTacToeGame,
         "image": "assets/ttt.jpg",
-        "tags": ["all", "2_players"],
+        "tags": ["all", "2_players", "online"],
         "color": "#607D8B"  # Серо-синий цвет
     },
     {

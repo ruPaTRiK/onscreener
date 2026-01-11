@@ -70,8 +70,8 @@ class CoinFlipDialog(QDialog):
             if item.widget(): item.widget().deleteLater()
 
         self.title.setText("Вы победили! Ваш выбор:")
-        b1 = QPushButton("Ходить 1-м (Белые/Крестики)")
-        b2 = QPushButton("Ходить 2-м (Черные/Нолики)")
+        b1 = QPushButton("Ходить 1-м")
+        b2 = QPushButton("Ходить 2-м")
 
         b1.setStyleSheet("background: #27ae60; color: white; padding: 10px; border-radius: 5px;")
         b1.clicked.connect(lambda: self.emit_order("first"))

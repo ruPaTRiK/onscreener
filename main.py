@@ -47,7 +47,7 @@ class GameCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.is_selected = False
 
-        self.default_style = self._get_style("#393646")
+        self.default_style = self._get_style("#3E3E50")
         self.selected_style = self._get_style("#2ed573")  # Зеленая рамка
 
         self.setStyleSheet(self.default_style)
@@ -168,8 +168,9 @@ class Launcher(OverlayWindow):
         self.left_layout.setContentsMargins(20, 20, 20, 20)
 
         header = QLabel("Коллекция Игр")
+        header.setObjectName("CollectionHeader")
         header.setFont(QFont("Arial", 22, QFont.Weight.Bold))
-        header.setStyleSheet("color: white;")
+        header.setStyleSheet("color: #EAEAEA;")
         self.left_layout.addWidget(header)
 
         self.scroll = QScrollArea()
@@ -188,7 +189,7 @@ class Launcher(OverlayWindow):
 
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: rgba(255,255,255,50);")
+        line.setStyleSheet("color: #EAEAEA;")
         self.left_layout.addWidget(line)
 
         self.active_games_container = QWidget()
@@ -202,7 +203,8 @@ class Launcher(OverlayWindow):
         self.left_layout.addWidget(self.active_scroll)
 
         btn_exit = QPushButton("Закрыть программу")
-        btn_exit.setStyleSheet("color: #aaa; background: transparent; font-size: 14px; text-align: left;")
+        btn_exit.setObjectName("ExitBttn")
+        btn_exit.setStyleSheet("color: #EAEAEA; background: transparent; font-size: 14px; text-align: left;")
         btn_exit.clicked.connect(self.close)
         self.left_layout.addWidget(btn_exit)
 
@@ -210,13 +212,15 @@ class Launcher(OverlayWindow):
 
         # === ПРАВАЯ ЧАСТЬ (ОНЛАЙН) ===
         self.right_panel = QFrame()
-        self.right_panel.setStyleSheet("background-color: rgba(0, 0, 0, 80); border-left: 1px solid #555;")
+        self.right_panel.setObjectName("RightPanel")
+        self.right_panel.setStyleSheet("background-color: #2A2A3C; border: 10px solid #1E1E2E; border-radius: 25px;")
         self.right_layout = QVBoxLayout(self.right_panel)
         self.right_layout.setContentsMargins(15, 20, 15, 20)
 
         lbl_online = QLabel("ОНЛАЙН ЛОББИ")
+        lbl_online.setObjectName("OnlineHeader")
         lbl_online.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        lbl_online.setStyleSheet("color: white; border: none; background: transparent;")
+        lbl_online.setStyleSheet("color: #EAEAEA; border: none; background: transparent;")
         lbl_online.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.right_layout.addWidget(lbl_online)
 
@@ -224,26 +228,33 @@ class Launcher(OverlayWindow):
         self.name_inp = QLineEdit("Player")
         self.name_inp.setPlaceholderText("Ваше имя")
         self.name_inp.setStyleSheet(
-            "padding: 5px; background: rgba(255,255,255,30); color: white; border: 1px solid #777; border-radius: 5px;")
+            "QLineEdit {padding: 5px; background: rgba(82, 97, 107, 20); color: #EAEAEA; border: none; border-radius: 7px;}"
+            "QLineEdit:disabled {background-color: rgba(82, 97, 107, 50); color: #A0A0A0; border: none;}")
         self.name_inp.editingFinished.connect(self.update_name)
         self.right_layout.addWidget(self.name_inp)
 
         # Стек экранов
         self.stack = QStackedWidget()
         self.right_layout.addWidget(self.stack)
+        self.stack.setStyleSheet("background: transparent; border: none;")
 
         # ЭКРАН 0: СПИСОК КОМНАТ
         self.page_list = QWidget()
         pl_layout = QVBoxLayout(self.page_list)
         pl_layout.setContentsMargins(0, 0, 0, 0)
 
+
         self.lobby_list_widget = QListWidget()
-        self.lobby_list_widget.setStyleSheet("background: transparent; color: white; border: none;")
+        self.lobby_list_widget.setStyleSheet("QListWidget {background: transparent; color: #EAEAEA; border: none;}"
+                                             "QListWidget::item { background: rgba(82, 97, 107, 60); padding: 5px; margin: 5px 0; border-radius: 7px; color: #EAEAEA;}"
+                                             "QListWidget::item:hover { background: rgba(82, 97, 107, 90); }"
+                                             "QListWidget::item:selected { background: rgba(82, 97, 107, 70); }"
+                                             "QListWidget::item:selected:active { background: rgba(82, 97, 107, 70); }")
         self.lobby_list_widget.itemDoubleClicked.connect(self.on_lobby_double_click)
         pl_layout.addWidget(self.lobby_list_widget)
 
         btn_create = QPushButton("Создать комнату")
-        btn_create.setStyleSheet("background: #27ae60; color: white; padding: 8px; border-radius: 5px;")
+        btn_create.setStyleSheet("background: #2ECC71; color: #EAEAEA; padding: 8px; border-radius: 7px;")
         btn_create.clicked.connect(self.open_create_dialog)
         pl_layout.addWidget(btn_create)
 
@@ -260,11 +271,15 @@ class Launcher(OverlayWindow):
         pr_layout.addWidget(self.room_title)
 
         self.room_players = QListWidget()
-        self.room_players.setStyleSheet("background: rgba(0,0,0,50); color: white; border-radius: 5px;")
+        self.room_players.setStyleSheet("QListWidget {background: transparent; color: #EAEAEA; border: none;}"
+                                        "QListWidget::item { background: rgba(82, 97, 107, 60); padding: 5px; margin: 5px 0; border-radius: 7px; color: #EAEAEA;}"
+                                        "QListWidget::item:hover { background: rgba(82, 97, 107, 90); }"
+                                        "QListWidget::item:selected { background: rgba(82, 97, 107, 70); }"
+                                        "QListWidget::item:selected:active { background: rgba(82, 97, 107, 70); }")
         pr_layout.addWidget(self.room_players)
 
         self.lbl_selected_game = QLabel("Выберите игру слева")
-        self.lbl_selected_game.setStyleSheet("color: #aaa; background: transparent; border: none;")
+        self.lbl_selected_game.setStyleSheet("color: #EAEAEA; background: transparent; border: none;")
         self.lbl_selected_game.setWordWrap(True)
         self.lbl_selected_game.setAlignment(Qt.AlignmentFlag.AlignCenter)
         pr_layout.addWidget(self.lbl_selected_game)
@@ -272,12 +287,12 @@ class Launcher(OverlayWindow):
         # Управление
         ctrl_layout = QHBoxLayout()
         self.check_ready = QCheckBox("Я ГОТОВ")
-        self.check_ready.setStyleSheet("color: white; font-weight: bold;")
+        self.check_ready.setStyleSheet("color: #EAEAEA; font-weight: bold;")
         self.check_ready.toggled.connect(self.send_ready_status)
         ctrl_layout.addWidget(self.check_ready)
 
         btn_leave = QPushButton("Выйти")
-        btn_leave.setStyleSheet("background: #c0392b; color: white; padding: 5px; border-radius: 5px;")
+        btn_leave.setStyleSheet("background: #E74C3C; color: #EAEAEA; padding: 5px; border-radius: 5px;")
         btn_leave.clicked.connect(self.leave_lobby)
         ctrl_layout.addWidget(btn_leave)
 
@@ -405,6 +420,8 @@ class Launcher(OverlayWindow):
         self.current_lobby_id = data["lobby_id"]
         self.is_host = data["am_i_host"]
 
+        self.name_inp.setEnabled(False)
+
         self.room_title.setText(f"Комната: {data['name']}")
 
         self.room_players.clear()
@@ -448,6 +465,7 @@ class Launcher(OverlayWindow):
     def leave_lobby(self):
         self.network.send_json({"type": "leave_lobby"})
         self.check_ready.setChecked(False)
+        self.name_inp.setEnabled(True)
 
     def send_ready_status(self, checked):
         self.network.send_json({"type": "toggle_ready", "status": checked})
@@ -504,7 +522,7 @@ class Launcher(OverlayWindow):
             del self.running_games[window_id]
 
     def paintEvent(self, event):
-        self.central_widget.setStyleSheet("background-color: #4F4557; border-radius: 15px;")
+        self.central_widget.setStyleSheet("background-color: #1E1E2E; border-radius: 15px;")
         super().paintEvent(event)
 
     def resizeEvent(self, event):

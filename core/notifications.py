@@ -11,22 +11,22 @@ class ToastNotification(QWidget):
 
         # Настройки цветов и иконок
         colors = {
-            "success": "#2ecc71",
-            "error": "#e74c3c",
+            "success": "#2ECC71",
+            "error": "#E74C3C",
             "warning": "#f39c12",
-            "info": "#3498db"
+            "info": "#3498DB"
         }
-        accent_color = colors.get(type_name, "#3498db")
+        accent_color = colors.get(type_name, "#3498DB")
 
         # Основной стиль виджета
         self.setObjectName("ToastWidget")
         self.setStyleSheet(f"""
             #ToastWidget {{
-                background-color: #393646;
+                background-color: #7F85F5;
                 border-left: 5px solid {accent_color};
                 border-radius: 5px;
             }}
-            QLabel {{ color: white; }}
+            QLabel {{ color: #EAEAEA; }}
         """)
 
         self.setFixedSize(300, 70)
@@ -46,7 +46,7 @@ class ToastNotification(QWidget):
         lbl_msg = QLabel(message)
         lbl_msg.setFont(QFont("Arial", 9))
         lbl_msg.setWordWrap(True)
-        lbl_msg.setStyleSheet("color: #bdc3c7;")
+        lbl_msg.setStyleSheet("color: #A0A0A0;")
         text_layout.addWidget(lbl_msg)
 
         layout.addLayout(text_layout)
@@ -57,7 +57,7 @@ class ToastNotification(QWidget):
         btn_close.setFixedSize(20, 20)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.setStyleSheet("""
-            QPushButton { background: none; color: #7f8c8d; border: none; font-weight: bold; }
+            QPushButton { background: none; color: #EAEAEA; border: none; font-weight: bold; }
             QPushButton:hover { color: white; }
         """)
         btn_close.clicked.connect(self.close_toast)
