@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QPainter, QBrush, QColor, QFont, QPen
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QRect, QPoint, QPropertyAnimation, QEasingCurve, QTimer
 from core.base_window import OverlayWindow
 from games.checkers.logic import CheckersLogic
 
@@ -20,6 +20,8 @@ class CheckersGame(OverlayWindow):
 
         self.selected_piece = None
         self.valid_moves = []
+
+        self.hidden_piece_pos = None # Координата клетки, где шашку временно не надо рисовать
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -164,8 +166,12 @@ class CheckersGame(OverlayWindow):
                     r = int(min(cell_size_w, cell_size_h) * 0.15)  # Точка = 15% от клетки
                     painter.drawEllipse(cx - r, cy - r, r * 2, r * 2)
 
+                should_draw = True
+                if self.hidden_piece_pos and self.hidden_piece_pos == (row, col):
+                    should_draw = False
+
                 # --- ШАШКА ---
-                if piece != 0:
+                if piece != 0 and should_draw:
                     # Центрируем
                     offset_x = (cell_size_w - piece_diameter) // 2
                     offset_y = (cell_size_h - piece_diameter) // 2
@@ -196,7 +202,8 @@ class CheckersGame(OverlayWindow):
             start_pos = self.selected_piece
             end_pos = (row, col)
 
-            # Пытаемся походить в логике
+            moving_piece_val = self.logic.board[start_pos[0]][start_pos[1]]
+
             success = self.logic.move_piece(start_pos, end_pos)
 
             if success:
@@ -216,7 +223,7 @@ class CheckersGame(OverlayWindow):
                     self.selected_piece = None
                     self.valid_moves = []
 
-            self._update_ui()
+            self.animate_move(start_pos, end_pos, moving_piece_val)
             return
 
         # 2. ВЫБОР ФИГУРЫ (если ничего не выбрано или кликнули на другую)
@@ -258,8 +265,10 @@ class CheckersGame(OverlayWindow):
                 r1, c1 = map(int, coords[0].split(","))
                 r2, c2 = map(int, coords[1].split(","))
 
+                piece_val = self.logic.board[r1][c1]
+
                 self.logic.move_piece((r1, c1), (r2, c2))
-                self._update_ui()
+                self.animate_move((r1, c1), (r2, c2), piece_val)
             except:
                 pass
         elif message == "restart_cmd":
@@ -278,3 +287,90 @@ class CheckersGame(OverlayWindow):
         self.valid_moves = []
 
         self._update_ui()
+
+    def animate_move(self, start_pos, end_pos, piece_val):
+        """
+        start_pos, end_pos: кортежи (row, col)
+        piece_val: числовое значение шашки (1, 2, 3, 4) для отрисовки
+        """
+        r1, c1 = start_pos
+        r2, c2 = end_pos
+
+        # 1. Вычисляем координаты в пикселях
+        # Нам нужно найти виджеты клеток, чтобы узнать их точные координаты
+        start_label = self.cells[(r1, c1)]
+        end_label = self.cells[(r2, c2)]
+
+        # Получаем геометрию относительно окна игры
+        start_geom = start_label.geometry()
+        end_geom = end_label.geometry()
+
+        # Смещаем координаты, так как labels находятся внутри board_container
+        # Нам нужны координаты относительно self (окна игры)
+        offset = self.board_container.pos()
+        start_point = start_geom.topLeft() + offset
+        end_point = end_geom.topLeft() + offset
+
+        # 2. Создаем "Летящую шашку" (Floating Widget)
+        # Это просто QLabel, который лежит поверх всего
+        floater = QLabel(self)
+        floater.resize(start_geom.size())
+        floater.show()
+
+        # Рисуем в него шашку (копируем код из _update_ui, но для одного виджета)
+        # piece_size вычисляем так же
+        cell_w = start_geom.width()
+        cell_h = start_geom.height()
+        piece_size = min(cell_w, cell_h) - 14
+        if piece_size < 1: piece_size = 1
+
+        pixmap = QPixmap(cell_w, cell_h)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # Рисуем конкретную шашку
+        if piece_val in [1, 3]:  # Белые
+            painter.setBrush(QBrush(Qt.GlobalColor.white))
+            painter.setPen(Qt.PenStyle.NoPen)
+        else:  # Черные
+            painter.setBrush(QBrush(Qt.GlobalColor.black))
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        # Центрируем
+        offset_x = (cell_w - piece_size) // 2
+        offset_y = (cell_h - piece_size) // 2
+        painter.drawEllipse(offset_x, offset_y, piece_size, piece_size)
+
+        # Корона для дамки
+        if piece_val in [3, 4]:
+            painter.setBrush(QBrush(QColor("gold")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            center = cell_w // 2
+            r = piece_size // 5
+            painter.drawEllipse(center - r, center - r, r * 2, r * 2)
+
+        painter.end()
+        floater.setPixmap(pixmap)
+
+        # 3. Настраиваем анимацию
+        self.anim = QPropertyAnimation(floater, b"pos")
+        self.anim.setDuration(300)  # Длительность мс
+        self.anim.setStartValue(start_point)
+        self.anim.setEndValue(end_point)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)  # Плавное замедление в конце
+
+        # Когда закончим - удаляем флоатер и "проявляем" настоящую шашку
+        # Нам нужно запомнить end_pos, чтобы обновить UI
+        self.anim.finished.connect(lambda: self.finish_animation(floater, end_pos))
+        self.anim.start()
+
+        # 4. Скрываем настоящую шашку в конечной точке, пока летит фейковая
+        # Мы ставим специальный флаг, который проверим в _update_ui
+        self.hidden_piece_pos = end_pos
+        self._update_ui()  # Перерисовываем (цель исчезнет)
+
+    def finish_animation(self, floater, end_pos):
+        floater.deleteLater()  # Удаляем летуна
+        self.hidden_piece_pos = None  # Снимаем скрытие
+        self._update_ui()  # Рисуем доску нормально
