@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
                              QCheckBox, QMessageBox)
 from PyQt6.QtGui import QFont, QColor, QIcon
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QDateTime
 
 from core.base_window import OverlayWindow
 from core.network import NetworkClient
@@ -82,6 +82,9 @@ class GameCard(QFrame):
 class Launcher(OverlayWindow):
     def __init__(self):
         super().__init__(overlay_mode=False)
+        self.setWindowTitle("onscreener")
+        self.setWindowFlags(Qt.WindowType.Window)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.resize(1100, 750)
 
         self.notifications = NotificationManager(self)
@@ -89,6 +92,7 @@ class Launcher(OverlayWindow):
         # Сеть
         self.network = NetworkClient()
         self.network.json_received.connect(self.on_server_data)
+        self.network.data_sent.connect(self.on_client_data)
         self.network.connected.connect(self.on_connected)
         self.network.disconnected.connect(self.on_disconnected)
         self.network.error_occurred.connect(self.on_net_error)
@@ -97,6 +101,9 @@ class Launcher(OverlayWindow):
         self.my_id_in_lobby = None  # ID (1 или 2), который выдал сервер
         self.current_lobby_id = None
         self.is_host = False
+        self.is_game_running = False
+        self.active_game = None
+        self.active_game_id = None
         self.game_cards = {}  # {game_id: card_widget}
 
         self.init_ui()
@@ -202,12 +209,6 @@ class Launcher(OverlayWindow):
         self.active_scroll.setWidget(self.active_games_container)
         self.left_layout.addWidget(self.active_scroll)
 
-        btn_exit = QPushButton("Закрыть программу")
-        btn_exit.setObjectName("ExitBttn")
-        btn_exit.setStyleSheet("color: #EAEAEA; background: transparent; font-size: 14px; text-align: left;")
-        btn_exit.clicked.connect(self.close)
-        self.left_layout.addWidget(btn_exit)
-
         self.main_h_layout.addWidget(self.left_panel, stretch=3)
 
         # === ПРАВАЯ ЧАСТЬ (ОНЛАЙН) ===
@@ -277,6 +278,15 @@ class Launcher(OverlayWindow):
                                         "QListWidget::item:selected { background: rgba(82, 97, 107, 70); }"
                                         "QListWidget::item:selected:active { background: rgba(82, 97, 107, 70); }")
         pr_layout.addWidget(self.room_players)
+
+        lbl_log = QLabel("Лог ходов:")
+        lbl_log.setStyleSheet("color: #aaa; font-size: 12px; margin-top: 5px;")
+        pr_layout.addWidget(lbl_log)
+
+        self.room_log = QListWidget()
+        self.room_log.setStyleSheet("background: rgba(0,0,0,50); border-radius: 5px; color: #ccc; font-size: 11px;")
+        self.room_log.model().rowsInserted.connect(self.room_log.scrollToBottom)
+        pr_layout.addWidget(self.room_log)
 
         self.lbl_selected_game = QLabel("Выберите игру слева")
         self.lbl_selected_game.setStyleSheet("color: #EAEAEA; background: transparent; border: none;")
@@ -364,6 +374,11 @@ class Launcher(OverlayWindow):
 
         elif dtype == "start_game":
             if self.coin_dialog: self.coin_dialog.accept()
+
+            if self.active_game:
+                self.active_game.close()
+                self.active_game = None
+
             self.notifications.show("Игра", "Игра начинается!", "success")
             self.launch_online_game(data["game"], data["color"])
 
@@ -374,10 +389,16 @@ class Launcher(OverlayWindow):
                 # Если это сложный объект (Морской бой) - передаем весь словарь
                 self.active_game.on_network_message(data)
 
+            self.process_log_entry(data, "Соперник")
+
         elif dtype == "restart_cmd" and self.active_game:
             self.active_game.logic.reset_game()
             self.active_game._update_ui()
             self.notifications.show("Рестарт", "Игра перезапущена", "info")
+
+    def on_client_data(self, data):
+        if data.get("type") == "game_move" and self.active_game:
+            self.process_log_entry(data, "Вы")
 
     def update_name(self):
         if self.network.is_running:
@@ -416,6 +437,9 @@ class Launcher(OverlayWindow):
 
     # --- ЛОГИКА ВНУТРИ КОМНАТЫ ---
     def update_room_ui(self, data):
+        if self.current_lobby_id != data["lobby_id"]:
+            self.room_log.clear()
+
         self.stack.setCurrentIndex(1)
         self.current_lobby_id = data["lobby_id"]
         self.is_host = data["am_i_host"]
@@ -472,6 +496,10 @@ class Launcher(OverlayWindow):
 
     # --- КЛИКИ ПО ИГРАМ ---
     def on_game_click(self, game_data):
+        if self.current_lobby_id and self.is_game_running:
+            self.notifications.show("Игра идет", "Нельзя менять игру во время матча!", "warning")
+            return
+
         # 1. Если не в лобби - Оффлайн запуск
         if not self.current_lobby_id:
             game_class = game_data["class"]
@@ -496,6 +524,13 @@ class Launcher(OverlayWindow):
     def launch_online_game(self, game_id, my_color):
         game_conf = next((g for g in GAMES_CONFIG if g["id"] == game_id), None)
         if game_conf:
+            self.active_game_id = game_id
+
+            if self.room_log.count() > 0:
+                self.room_log.addItem(QListWidgetItem(""))
+                self.room_log.addItem(QListWidgetItem("--- НОВАЯ ИГРА ---"))
+                self.room_log.addItem(QListWidgetItem(""))
+
             game_class = game_conf["class"]
             # Внимание: is_host в игре значит "играю за белых".
             # Это совпадает с my_color, который прислал сервер
@@ -505,6 +540,9 @@ class Launcher(OverlayWindow):
             self.active_game.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
             self.active_game.show()
             self.add_active_game_widget(self.active_game, f"{game_conf['title']} (Online)")
+
+            self.is_game_running = True
+            self.add_to_log(f"Игра {game_conf['title']} началась!")
 
     # --- СПИСОК ЗАПУЩЕННЫХ ---
     def add_active_game_widget(self, game_window, title):
@@ -517,12 +555,111 @@ class Launcher(OverlayWindow):
     def remove_active_game_widget(self, window_id):
         if hasattr(self, 'running_games') and window_id in self.running_games:
             w = self.running_games[window_id]
-            w.setParent(None);
+            w.setParent(None)
             w.deleteLater()
             del self.running_games[window_id]
 
+        self.is_game_running = False  # Разблокируем выбор игр
+
+        if self.active_game and id(self.active_game) == window_id:
+            self.active_game = None
+            self.active_game_id = None
+
+        # Если мы в лобби, снимаем готовность
+        if self.current_lobby_id:
+            self.check_ready.setChecked(False)  # Это автоматически отправит toggle_ready на сервер
+            self.notifications.show("Лобби", "Игра завершена. Статус: Не готов", "info")
+            self.add_to_log("Игра завершена")
+
+    def add_to_log(self, message):
+        import datetime
+        time_str = QDateTime.currentDateTime().toString("HH:mm:ss")
+        item = QListWidgetItem(f"[{time_str}] {message}")
+        self.room_log.addItem(item)
+
+    def format_coord(self, r, c, game_type):
+        """Конвертирует (row, col) в строку для лога"""
+        try:
+            r, c = int(r), int(c)
+
+            if game_type in ["chess", "checkers"]:
+                # Шахматы/Шашки: A1..H8
+                letters = "ABCDEFGH"
+                return f"{letters[c]}{8 - r}"
+
+            elif game_type == "tic_tac_toe":
+                # Крестики: Ряд 1..3, Стлб 1..3
+                return f"Ряд {r + 1}, Стлб {c + 1}"
+
+            elif game_type == "battleship":
+                # Морской бой: А1..К10
+                letters = "АБВГДЕЖЗИК"
+                return f"{letters[c]}{r + 1}"
+
+            return f"({r}, {c})"
+        except:
+            return "??"
+
+    def process_log_entry(self, data, source):
+        """
+        data: JSON с ходом
+        source: 'Вы' или 'Соперник'
+        """
+        if not self.active_game_id: return
+
+        # --- ШАШКИ И ШАХМАТЫ ---
+        if self.active_game_id in ["chess", "checkers"]:
+            if "data" in data and ":" in data["data"]:
+                try:
+                    # data="r1,c1:r2,c2"
+                    start, end = data["data"].split(":")
+                    r1, c1 = start.split(",")
+                    r2, c2 = end.split(",")
+
+                    p1 = self.format_coord(r1, c1, self.active_game_id)
+                    p2 = self.format_coord(r2, c2, self.active_game_id)
+                    self.add_to_log(f"{source}: {p1} -> {p2}")
+                except:
+                    pass
+
+        # --- КРЕСТИКИ-НОЛИКИ ---
+        elif self.active_game_id == "tic_tac_toe":
+            if "data" in data:
+                try:
+                    r, c = data["data"].split(",")
+                    pos = self.format_coord(r, c, self.active_game_id)
+                    self.add_to_log(f"{source}: {pos}")
+                except:
+                    pass
+
+        # --- МОРСКОЙ БОЙ ---
+        elif self.active_game_id == "battleship":
+            subtype = data.get("sub_type")
+            if subtype == "shot":
+                r, c = data.get("r"), data.get("c")
+                pos = self.format_coord(r, c, self.active_game_id)
+                action = "стреляет в" if source == "Соперник" else "выстрел в"
+                self.add_to_log(f"{source}: {action} {pos}")
+
+            elif subtype == "shot_result":
+                # Результат логируем, только если это ответ на НАШ выстрел (или наоборот, по желанию)
+                status = data.get("status")
+                # Для красоты переведем статусы
+                status_map = {"hit": "ПОПАДАНИЕ", "miss": "ПРОМАХ", "kill": "УБИЛ"}
+                ru_status = status_map.get(status, status)
+
+                # Если source="Соперник", значит это он прислал результат своего попадания?
+                # Нет, shot_result посылает тот, в кого стреляли.
+                # Если data пришла от сервера -> Соперник сообщает результат МОЕГО выстрела.
+                # Если data отправлена мной -> Я сообщаю результат ЕГО выстрела.
+
+                if source == "Соперник":
+                    self.add_to_log(f"Результат вашего выстрела: {ru_status}")
+                else:
+                    self.add_to_log(f"Результат выстрела соперника: {ru_status}")
+
     def paintEvent(self, event):
-        self.central_widget.setStyleSheet("background-color: #1E1E2E; border-radius: 15px;")
+        self.central_widget.setStyleSheet("background-color: #1E1E2E;")
         super().paintEvent(event)
 
     def resizeEvent(self, event):

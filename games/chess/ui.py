@@ -102,10 +102,12 @@ class ChessGame(OverlayWindow):
                 self.on_cell_click(row, col)
 
     def _update_ui(self):
-        status_text = ""
-        prefix = ""
         if self.is_online:
-            prefix = f"[ВЫ: {'Белые' if self.my_color == 'white' else 'Черные'}] "
+            white_suffix = " (Вы)" if self.my_color == 'white' else " (Соперник)"
+            black_suffix = " (Вы)" if self.my_color == 'black' else " (Соперник)"
+        else:
+            white_suffix = ""
+            black_suffix = ""
 
         # 1. СТАТУС БАР
         if self.logic.game_over:
@@ -127,7 +129,7 @@ class ChessGame(OverlayWindow):
                 "color: white; background-color: #d32f2f; border-radius: 10px; border: 3px solid white;")
 
         else:
-            turn_ru = "Белые" if self.logic.turn == 'white' else "Черные"
+            turn_ru = f"Белые{white_suffix}" if self.logic.turn == 'white' else f"Черные{black_suffix}"
             self.status_label.setText(f"Ход: {turn_ru}")
             # Обычный стиль
             if self.logic.turn == 'white':

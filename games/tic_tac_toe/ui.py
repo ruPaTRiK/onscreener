@@ -111,7 +111,13 @@ class TicTacToeGame(OverlayWindow):
     def _update_ui(self):
         # 1. Текст статуса
         if not self.logic.game_over:
-            text = "Ход: Крестики (X)" if self.logic.turn == 'X' else "Ход: Нолики (O)"
+            if self.is_online:
+                x_suf = " (Вы)" if self.my_mark == 'X' else " (Соперник)"
+                o_suf = " (Вы)" if self.my_mark == 'O' else " (Соперник)"
+            else:
+                x_suf = o_suf = ""
+
+            text = f"Ход: Крестики{x_suf}" if self.logic.turn == 'X' else f"Ход: Нолики{o_suf}"
             self.status_label.setText(text)
             self.status_label.setStyleSheet("color: white; background-color: rgba(0, 0, 0, 150); border-radius: 10px;")
         else:

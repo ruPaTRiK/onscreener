@@ -9,6 +9,7 @@ DEFAULT_SERVER_PORT = 5555
 
 class NetworkClient(QThread):
     json_received = pyqtSignal(dict)
+    data_sent = pyqtSignal(dict)
     connected = pyqtSignal()
     disconnected = pyqtSignal()
     error_occurred = pyqtSignal(str)
@@ -51,6 +52,7 @@ class NetworkClient(QThread):
             try:
                 msg = json.dumps(data) + "\n"
                 self.client.send(msg.encode('utf-8'))
+                self.data_sent.emit(data)
             except:
                 self.is_running = False
 

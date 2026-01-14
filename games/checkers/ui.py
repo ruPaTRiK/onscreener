@@ -101,15 +101,21 @@ class CheckersGame(OverlayWindow):
                 self.on_cell_click(row, col)
 
     def _update_ui(self):
+        if self.is_online:
+            white_suffix = " (Вы)" if self.my_color == 'white' else " (Соперник)"
+            black_suffix = " (Вы)" if self.my_color == 'black' else " (Соперник)"
+        else:
+            white_suffix = ""
+            black_suffix = ""
         # 1. Обновляем статус (текст сверху)
         if self.logic.turn == 'white':
-            self.status_label.setText("Ход: Белые")
+            self.status_label.setText(f"Ход: Белые{white_suffix}")
             self.status_label.setStyleSheet("""
                 color: white; background-color: rgba(0, 0, 0, 150); 
                 border-radius: 10px; padding: 5px; border: 2px solid white;
             """)
         else:
-            self.status_label.setText("Ход: Черные")
+            self.status_label.setText(f"Ход: Черные{black_suffix}")
             self.status_label.setStyleSheet("""
                 color: black; background-color: rgba(255, 255, 255, 200); 
                 border-radius: 10px; padding: 5px; border: 2px solid black;
