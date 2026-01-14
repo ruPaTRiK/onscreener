@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtCore import Qt, QRect, QPropertyAnimation, QEasingCurve
 from core.base_window import OverlayWindow
 from games.chess.logic import ChessLogic
 
@@ -21,6 +21,8 @@ class ChessGame(OverlayWindow):
 
         self.selected_piece = None
         self.valid_moves = []
+
+        self.hidden_piece_pos = None
 
         # Segoe UI Symbol должен быть в системе, иначе будут квадратики
         self.symbols = {
@@ -191,7 +193,11 @@ class ChessGame(OverlayWindow):
                     else:
                         painter.drawEllipse(cx - r, cy - r, r * 2, r * 2)
 
-                if piece_code != '':
+                should_draw = True
+                if self.hidden_piece_pos and self.hidden_piece_pos == (row, col):
+                    should_draw = False
+
+                if piece_code != '' and should_draw:
                     symbol = self.symbols[piece_code]
                     painter.setFont(font)
                     if piece_code.startswith('w'):
@@ -210,21 +216,27 @@ class ChessGame(OverlayWindow):
                 label.setPixmap(pixmap)
 
     def on_cell_click(self, row, col):
-        start = self.selected_piece
-        end = (row, col)
-
+        # 1. ЛОГИКА ХОДА
         if self.selected_piece and (row, col) in self.valid_moves:
-            success = self.logic.move_piece(self.selected_piece, (row, col))
+            start = self.selected_piece
+            end = (row, col)
+
+            piece_code = self.logic.board[start[0]][start[1]]
+
+            success = self.logic.move_piece(start, end)
             if success:
                 self.selected_piece = None
                 self.valid_moves = []
-                self._update_ui()
+
+                # Отправка по сети
                 if self.is_online and self.network:
-                    # Формат: "r1,c1:r2,c2"
                     data_str = f"{start[0]},{start[1]}:{end[0]},{end[1]}"
                     self.network.send_json({"type": "game_move", "data": data_str})
-            return
 
+                self.animate_move(start, end, piece_code)
+                return
+
+        # 2. ЛОГИКА ВЫБОРА
         piece = self.logic.board[row][col]
         if piece != '':
             color = piece[0]
@@ -253,9 +265,11 @@ class ChessGame(OverlayWindow):
                 r1, c1 = map(int, coords[0].split(","))
                 r2, c2 = map(int, coords[1].split(","))
 
+                piece_code = self.logic.board[r1][c1]
+
                 # Применяем ход
                 self.logic.move_piece((r1, c1), (r2, c2))
-                self._update_ui()
+                self.animate_move((r1, c1), (r2, c2), piece_code)
             except Exception as e:
                 print(f"Ошибка сети в игре: {e}")
         elif message == "restart_cmd":
@@ -273,4 +287,78 @@ class ChessGame(OverlayWindow):
         self.selected_piece = None
         self.valid_moves = []
 
+        self._update_ui()
+
+    def animate_move(self, start_pos, end_pos, piece_code):
+        """
+        piece_code: строка типа 'wK', 'bP' и т.д.
+        """
+        r1, c1 = start_pos
+        r2, c2 = end_pos
+
+        start_label = self.cells[(r1, c1)]
+        end_label = self.cells[(r2, c2)]
+
+        start_geom = start_label.geometry()
+        end_geom = end_label.geometry()
+
+        offset = self.board_container.pos()
+        start_point = start_geom.topLeft() + offset
+        end_point = end_geom.topLeft() + offset
+
+        # Создаем Floating Widget
+        floater = QLabel(self)
+        floater.resize(start_geom.size())
+        floater.show()
+
+        cell_w = start_geom.width()
+        cell_h = start_geom.height()
+
+        pixmap = QPixmap(cell_w, cell_h)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # --- РИСУЕМ ФИГУРУ (Код из _update_ui) ---
+        if piece_code != '':
+            symbol = self.symbols[piece_code]
+
+            # Шрифт вычисляем так же, как в update_ui
+            font_size = int(min(cell_w, cell_h) * 0.7)
+            font = QFont("Segoe UI Symbol", font_size)
+            painter.setFont(font)
+
+            if piece_code.startswith('w'):
+                painter.setPen(QColor("white"))
+            else:
+                painter.setPen(QColor("black"))
+
+            rect = QRect(0, 0, cell_w, cell_h)
+            if piece_code.startswith('w'):
+                painter.setPen(QColor("black"))
+                painter.drawText(rect.adjusted(1, 1, 1, 1), Qt.AlignmentFlag.AlignCenter, symbol)
+                painter.setPen(QColor("white"))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, symbol)
+        # ------------------------------------------
+
+        painter.end()
+        floater.setPixmap(pixmap)
+
+        # Анимация
+        self.anim = QPropertyAnimation(floater, b"pos")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(start_point)
+        self.anim.setEndValue(end_point)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        self.anim.finished.connect(lambda: self.finish_animation(floater, end_pos))
+        self.anim.start()
+
+        self.hidden_piece_pos = end_pos
+        self._update_ui()
+
+    def finish_animation(self, floater, end_pos):
+        floater.deleteLater()
+        self.hidden_piece_pos = None
         self._update_ui()

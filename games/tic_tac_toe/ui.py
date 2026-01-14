@@ -1,8 +1,78 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QVBoxLayout
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer, QRect
 from core.base_window import OverlayWindow
 from games.tic_tac_toe.logic import TicTacToeLogic
+
+
+class DrawingAnimation(QWidget):
+    def __init__(self, parent, rect, symbol, on_finish):
+        super().__init__(parent)
+        self.setGeometry(rect)
+        self.symbol = symbol
+        self.on_finish = on_finish
+        self.progress = 0  # 0.0 to 1.0
+        self.show()
+
+        # Таймер анимации
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.animate)
+        self.timer.start(16)  # ~60 FPS
+
+    def animate(self):
+        self.progress += 0.05  # Скорость анимации
+        if self.progress >= 1.0:
+            self.progress = 1.0
+            self.timer.stop()
+            self.on_finish()
+            self.deleteLater()
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w, h = self.width(), self.height()
+        pen_width = max(3, min(w, h) // 15)
+
+        margin = int(min(w, h) * 0.25)
+
+        if self.symbol == 'X':
+            pen = QPen(QColor("#4FC3F7"))
+            pen.setWidth(pen_width)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+
+            # Рисуем две линии последовательно
+            # Первая линия (0.0 - 0.5), Вторая (0.5 - 1.0)
+
+            # Линия 1: \
+            p1_end = min(self.progress * 2, 1.0)
+            if p1_end > 0:
+                x1, y1 = margin, margin
+                x2 = margin + (w - 2 * margin) * p1_end
+                y2 = margin + (h - 2 * margin) * p1_end
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+            # Линия 2: /
+            if self.progress > 0.5:
+                p2_end = (self.progress - 0.5) * 2
+                x1, y1 = w - margin, margin
+                x2 = (w - margin) - (w - 2 * margin) * p2_end
+                y2 = margin + (h - 2 * margin) * p2_end
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+        elif self.symbol == 'O':
+            pen = QPen(QColor("#FF5252"))
+            pen.setWidth(pen_width)
+            painter.setPen(pen)
+
+            # Рисуем дугу (угол в 1/16 градуса)
+            # Полный круг = 360 * 16 = 5760
+            span_angle = int(5760 * self.progress)
+
+            rect = QRect(margin, margin, w - 2 * margin, h - 2 * margin)
+            painter.drawArc(rect, 90 * 16, -span_angle)  # Начинаем сверху (90 град)
 
 
 class TicTacToeGame(OverlayWindow):
@@ -15,8 +85,9 @@ class TicTacToeGame(OverlayWindow):
         self.network = network_client
         self.my_mark = 'X'
         if self.is_online:
-            # Хост всегда Крестики (X), Гость - Нолики (O)
             self.my_mark = 'X' if is_host else 'O'
+
+        self.hidden_cell = None
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -66,6 +137,9 @@ class TicTacToeGame(OverlayWindow):
         super().resizeEvent(event)
         self._update_ui()
 
+    def closeEvent(self, event):
+        super().closeEvent(event)
+
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         if self._action is not None: return
@@ -100,13 +174,15 @@ class TicTacToeGame(OverlayWindow):
 
             # 4. СОВЕРШЕНИЕ ХОДА
             if 0 <= row < 3 and 0 <= col < 3:
-                if self.logic.make_move(row, col):
-                    self._update_ui()
+                symbol = self.logic.turn
 
+                if self.logic.make_move(row, col):
                     # Отправка хода
                     if self.is_online and self.network:
                         # Формат: "r,c" (так как это строка data)
                         self.network.send_json({"type": "game_move", "data": f"{row},{col}"})
+
+                    self.start_animation(row, col, symbol)
 
     def _update_ui(self):
         # 1. Текст статуса
@@ -155,24 +231,29 @@ class TicTacToeGame(OverlayWindow):
                 # Настройка линий (толщина зависит от размера окна)
                 pen_width = max(3, min(cell_w, cell_h) // 15)
 
-                if symbol == 'X':
-                    pen = QPen(QColor("#4FC3F7"))  # Голубой цвет для X
-                    pen.setWidth(pen_width)
-                    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-                    painter.setPen(pen)
+                should_draw = True
+                if self.hidden_cell == (row, col):
+                    should_draw = False
 
-                    margin = int(min(cell_w, cell_h) * 0.25)
-                    painter.drawLine(margin, margin, cell_w - margin, cell_h - margin)
-                    painter.drawLine(cell_w - margin, margin, margin, cell_h - margin)
+                if should_draw:
+                    if symbol == 'X':
+                        pen = QPen(QColor("#4FC3F7"))  # Голубой цвет для X
+                        pen.setWidth(pen_width)
+                        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                        painter.setPen(pen)
 
-                elif symbol == 'O':
-                    pen = QPen(QColor("#FF5252"))  # Красный цвет для O
-                    pen.setWidth(pen_width)
-                    painter.setPen(pen)
-                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                        margin = int(min(cell_w, cell_h) * 0.25)
+                        painter.drawLine(margin, margin, cell_w - margin, cell_h - margin)
+                        painter.drawLine(cell_w - margin, margin, margin, cell_h - margin)
 
-                    margin = int(min(cell_w, cell_h) * 0.25)
-                    painter.drawEllipse(margin, margin, cell_w - margin * 2, cell_h - margin * 2)
+                    elif symbol == 'O':
+                        pen = QPen(QColor("#FF5252"))  # Красный цвет для O
+                        pen.setWidth(pen_width)
+                        painter.setPen(pen)
+                        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+                        margin = int(min(cell_w, cell_h) * 0.25)
+                        painter.drawEllipse(margin, margin, cell_w - margin * 2, cell_h - margin * 2)
 
                 painter.end()
                 label.setPixmap(pixmap)
@@ -184,8 +265,10 @@ class TicTacToeGame(OverlayWindow):
                 data = message.split(":")[1]  # "1,2"
                 r, c = map(int, data.split(","))
 
+                symbol = self.logic.turn
                 self.logic.make_move(r, c)
-                self._update_ui()
+
+                self.start_animation(r, c, symbol)
             except:
                 pass
         elif message == "restart_cmd":
@@ -196,4 +279,22 @@ class TicTacToeGame(OverlayWindow):
         self.my_mark = 'X' if new_color == 'white' else 'O'
 
         self.logic.reset_game()
+        self._update_ui()
+
+    def start_animation(self, r, c, symbol):
+        # 1. Скрываем реальную клетку
+        self.hidden_cell = (r, c)
+        self._update_ui()
+
+        # 2. Находим координаты виджета
+        label = self.cells[(r, c)]
+        rect = label.geometry()
+        offset = self.board_container.pos()
+        final_rect = QRect(rect.topLeft() + offset, rect.size())
+
+        # 3. Создаем аниматор
+        DrawingAnimation(self, final_rect, symbol, self.finish_animation)
+
+    def finish_animation(self):
+        self.hidden_cell = None
         self._update_ui()
