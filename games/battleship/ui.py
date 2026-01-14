@@ -366,3 +366,19 @@ class BattleshipGame(OverlayWindow):
         self.ready_btn.hide()
         self.logic.my_turn = self.is_first_player
         self.update()
+
+    def swap_sides(self, new_color):
+        self.is_first_player = (new_color == 'white')
+
+        # Сбрасываем логику
+        self.logic.reset_game()
+
+        # Сбрасываем UI (флаги, кнопки)
+        self.opponent_ready = False
+        self.dragging_ship_id = None
+        self.drag_orientation = 'h'
+
+        self.ready_btn.setText("Я ГОТОВ К БОЮ")
+        self.ready_btn.hide()
+
+        self.update()

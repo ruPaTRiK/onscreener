@@ -261,3 +261,16 @@ class ChessGame(OverlayWindow):
         elif message == "restart_cmd":
             self.logic.reset_game()
             self._update_ui()
+
+    def swap_sides(self, new_color):
+        # 1. Меняем цвет
+        self.my_color = new_color
+
+        # 2. Сбрасываем логику
+        self.logic.reset_game()
+
+        # 3. Сбрасываем UI (выделение, логи)
+        self.selected_piece = None
+        self.valid_moves = []
+
+        self._update_ui()

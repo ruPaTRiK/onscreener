@@ -191,3 +191,9 @@ class TicTacToeGame(OverlayWindow):
         elif message == "restart_cmd":
             self.logic.reset_game()
             self._update_ui()
+
+    def swap_sides(self, new_color):
+        self.my_mark = 'X' if new_color == 'white' else 'O'
+
+        self.logic.reset_game()
+        self._update_ui()

@@ -277,39 +277,29 @@ async def handle_client(reader, writer):
                 if lid and lid in lobbies:
                     await pass_to_opponent(writer, lobbies[lid], data)
 
-            # 10. РЕСТАРТ (С СМЕНОЙ СТОРОН)
+            # 10. РЕСТАРТ (МЯГКАЯ СМЕНА СТОРОН)
             elif ctype == "restart_game":
                 lid = clients[writer]["current_lobby"]
                 if lid and lid in lobbies:
                     lobby = lobbies[lid]
-
-                    # Получаем список игроков (объекты writer)
                     players = list(lobby.players.keys())
 
-                    # Если игрок один (второй вышел), просто сбрасываем
                     if len(players) < 2:
-                        msg = {"type": "restart_cmd"}
+                        # Если один - просто сброс
                         for w in lobby.players:
-                            await send_json(w, msg)
+                            await send_json(w, {"type": "restart_cmd"})
                     else:
-                        # --- ЛОГИКА СМЕНЫ СТОРОН ---
-                        # Добавляем атрибут в лобби на лету, чтобы помнить, кто ходил первым
-                        # 0 - это создатель лобби, 1 - присоединившийся
+                        # Смена сторон
                         if not hasattr(lobby, "current_first_index"):
                             lobby.current_first_index = 0
 
-                        # Меняем индекс (0 -> 1 -> 0)
                         lobby.current_first_index = 1 - lobby.current_first_index
-
-                        # Определяем, чей writer соответствует новому индексу
                         new_first_writer = players[lobby.current_first_index]
-                        game_id = lobby.selected_game_id
 
-                        # Отправляем команду СТАРТА (а не рестарта) с новыми цветами
                         for w in players:
-                            # Тот, чей индекс выпал, становится "white" (ходит первым)
                             color = "white" if w == new_first_writer else "black"
-                            await send_json(w, {"type": "start_game", "game": game_id, "color": color})
+                            # Шлем новую команду restart_swap
+                            await send_json(w, {"type": "restart_swap", "color": color})
 
     except Exception as e:
         print(f"Connection error with {addr}: {e}")

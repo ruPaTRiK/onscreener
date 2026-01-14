@@ -396,6 +396,13 @@ class Launcher(OverlayWindow):
             self.active_game._update_ui()
             self.notifications.show("Рестарт", "Игра перезапущена", "info")
 
+        elif dtype == "restart_swap" and self.active_game:
+            new_color = data["color"]
+            # Вызываем метод смены сторон в игре
+            if hasattr(self.active_game, "swap_sides"):
+                self.active_game.swap_sides(new_color)
+                self.notifications.show("Рестарт", "Смена сторон!", "success")
+
     def on_client_data(self, data):
         if data.get("type") == "game_move" and self.active_game:
             self.process_log_entry(data, "Вы")
