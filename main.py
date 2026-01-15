@@ -28,7 +28,7 @@ from core.settings import SettingsManager
 from core.sound_manager import SoundManager
 
 
-CURRENT_VERSION = "0.71"
+CURRENT_VERSION = "0.7"
 
 
 # --- ВИДЖЕТ АКТИВНОЙ ИГРЫ (Снизу слева) ---
@@ -95,10 +95,16 @@ class GameCard(QFrame):
 
 # --- ЛАУНЧЕР ---
 class Launcher(OverlayWindow):
-    servers_loaded = pyqtSignal(list)
+    servers_loaded = pyqtSignal(object)
+
+    update_progress_signal = pyqtSignal(int)
+    update_finished_signal = pyqtSignal(bool)
 
     def __init__(self):
         super().__init__(overlay_mode=False)
+
+        self.cleanup_old_version()
+
         self.setWindowTitle("onscreener")
         self.setWindowFlags(Qt.WindowType.Window)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -114,6 +120,8 @@ class Launcher(OverlayWindow):
         self.network.disconnected.connect(self.on_disconnected)
         self.network.error_occurred.connect(self.on_net_error)
         self.servers_loaded.connect(self.finish_loading_servers)
+        self.update_progress_signal.connect(self.on_update_progress)
+        self.update_finished_signal.connect(self.finish_update)
 
         self.user_name = "Player"
         self.my_id_in_lobby = None  # ID (1 или 2), который выдал сервер
@@ -368,7 +376,10 @@ class Launcher(OverlayWindow):
     def fetch_server_list_and_connect(self):
         def worker():
             try:
-                url = "https://gist.githubusercontent.com/ruPaTRiK/fba2f42d20c7bb8893793928c3257880/raw/servers.json"
+                import time
+                base_url = "https://gist.githubusercontent.com/ruPaTRiK/fba2f42d20c7bb8893793928c3257880/raw/servers.json"
+
+                url = f"{base_url}?t={int(time.time())}"
 
                 req = urllib.request.Request(
                     url,
@@ -382,6 +393,7 @@ class Launcher(OverlayWindow):
 
                 with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
                     text_data = response.read().decode('utf-8')
+                    print(f"DEBUG: Пришло: {text_data}")
                     data = json.loads(text_data)
 
                     self.servers_loaded.emit(data)
@@ -394,35 +406,38 @@ class Launcher(OverlayWindow):
         t.start()
 
     def run_update_thread(self, updater, url):
-        # Callback для обновления прогресса из потока
         def progress_callback(percent):
-            # QMetaObject.invokeMethod - безопасный способ обновить GUI из потока
-            # Но проще через сигнал или QTimer
-            QTimer.singleShot(0, lambda: self.update_dlg.set_progress(percent))
+            self.update_progress_signal.emit(percent)
 
         success = updater.download_update(url, progress_callback)
 
         # Завершение
-        QTimer.singleShot(0, lambda: self.finish_update(updater, success))
+        self.update_finished_signal.emit(success)
 
-    def finish_update(self, updater, success):
-        self.update_dlg.close()
+    def finish_update(self, success):
+        if hasattr(self, 'update_dlg'):
+            self.update_dlg.close()
 
         if success:
             self.notifications.show("Обновление", "Установка...", "success")
             # Даем секунду на отрисовку уведомления
-            QTimer.singleShot(1000, updater.restart_and_replace)
+            QTimer.singleShot(1000, self.updater_instance.restart_and_replace)
         else:
             self.notifications.show("Ошибка", "Не удалось скачать обновление", "error")
 
+    def on_update_progress(self, percent):
+        if hasattr(self, 'update_dlg'):
+            self.update_dlg.set_progress(percent)
+
     def finish_loading_servers(self, raw_data):
         servers = []
-        if isinstance(raw_data, dict):
-            remote_ver = raw_data.get("version", "0.0")
-            download_url = raw_data.get("url", "")
-            servers = raw_data.get("servers", [])
+        print(raw_data)
+        try:
+            if isinstance(raw_data, dict):
+                remote_ver = raw_data.get("version", "0.0")
+                download_url = raw_data.get("url", "")
+                servers = raw_data.get("servers", [])
 
-            try:
                 # ПРОВЕРКА ОБНОВЛЕНИЯ
                 updater = AutoUpdater(CURRENT_VERSION)
                 if updater.is_update_available(remote_ver):
@@ -435,15 +450,18 @@ class Launcher(OverlayWindow):
                     if reply == QMessageBox.StandardButton.Yes:
                         self.update_dlg = UpdateProgressDialog(self)
                         self.update_dlg.show()
+
+                        self.updater_instance = updater
+
                         t = threading.Thread(target=self.run_update_thread, args=(updater, download_url))
                         t.daemon = True
                         t.start()
                         return
-            except Exception as e:
-                print(f"Ошибка в блоке обновления: {e}")
 
-        elif isinstance(raw_data, list):
-            servers = raw_data
+            elif isinstance(raw_data, list):
+                servers = raw_data
+        except Exception as e:
+            print(f"Ошибка в блоке обновления: {e}")
 
         self.servers_list = servers
 
@@ -456,6 +474,28 @@ class Launcher(OverlayWindow):
             self.network.connect_to(ip, port)
         else:
             self.network.connect_to("127.0.0.1", 5555)
+
+    def cleanup_old_version(self):
+        """Удаляет старый файл .old после обновления"""
+        try:
+            current_exe = sys.executable
+            old_exe = current_exe + ".old"
+
+            if os.path.exists(old_exe):
+                # Пробуем удалить. Если он еще занят закрывающимся процессом,
+                # попробуем через секунду через QTimer
+                def try_delete():
+                    try:
+                        if os.path.exists(old_exe):
+                            os.remove(old_exe)
+                            print("DEBUG: Старая версия удалена.")
+                    except:
+                        # Если не вышло, пробуем еще раз через 2 секунды
+                        QTimer.singleShot(2000, try_delete)
+
+                try_delete()
+        except:
+            pass
 
     def open_server_dialog(self):
         dlg = ServerSelectDialog(self, self.servers_list)
