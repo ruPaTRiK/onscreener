@@ -368,7 +368,7 @@ class Launcher(OverlayWindow):
     def fetch_server_list_and_connect(self):
         def worker():
             try:
-                url = "https://gist.githubusercontent.com/ruPaTRiK/fba2f42d20c7bb8893793928c3257880/raw/447c87e796460f816456de55d2235b5b7081d043/servers.json"
+                url = "https://gist.githubusercontent.com/ruPaTRiK/fba2f42d20c7bb8893793928c3257880/raw/servers.json"
 
                 req = urllib.request.Request(
                     url,
@@ -389,14 +389,9 @@ class Launcher(OverlayWindow):
             except Exception as e:
                 self.servers_loaded.emit([])
 
-        t = threading.Thread(target=self._thread_loader, args=(worker,))
+        t = threading.Thread(target=worker)
         t.daemon = True
         t.start()
-
-    def _thread_loader(self, worker):
-        data = worker()
-        # Возвращаемся в GUI поток
-        QTimer.singleShot(0, lambda: self.finish_loading_servers(data))
 
     def run_update_thread(self, updater, url):
         # Callback для обновления прогресса из потока
@@ -422,28 +417,30 @@ class Launcher(OverlayWindow):
 
     def finish_loading_servers(self, raw_data):
         servers = []
-
         if isinstance(raw_data, dict):
             remote_ver = raw_data.get("version", "0.0")
             download_url = raw_data.get("url", "")
             servers = raw_data.get("servers", [])
 
-            # ПРОВЕРКА ОБНОВЛЕНИЯ
-            updater = AutoUpdater(CURRENT_VERSION)
-            if updater.is_update_available(remote_ver):
-                reply = QMessageBox.question(
-                    self, "Обновление",
-                    f"Доступна новая версия {remote_ver}.\nОбновить сейчас?",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
+            try:
+                # ПРОВЕРКА ОБНОВЛЕНИЯ
+                updater = AutoUpdater(CURRENT_VERSION)
+                if updater.is_update_available(remote_ver):
+                    reply = QMessageBox.question(
+                        self, "Обновление",
+                        f"Доступна новая версия {remote_ver}.\nОбновить сейчас?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
 
-                if reply == QMessageBox.StandardButton.Yes:
-                    self.update_dlg = UpdateProgressDialog(self)
-                    self.update_dlg.show()
-                    t = threading.Thread(target=self.run_update_thread, args=(updater, download_url))
-                    t.daemon = True
-                    t.start()
-                    return
+                    if reply == QMessageBox.StandardButton.Yes:
+                        self.update_dlg = UpdateProgressDialog(self)
+                        self.update_dlg.show()
+                        t = threading.Thread(target=self.run_update_thread, args=(updater, download_url))
+                        t.daemon = True
+                        t.start()
+                        return
+            except Exception as e:
+                print(f"Ошибка в блоке обновления: {e}")
 
         elif isinstance(raw_data, list):
             servers = raw_data
