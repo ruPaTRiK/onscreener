@@ -1,0 +1,199 @@
+### План для Эмоций:
+1.  **UI**: Добавляем кнопку "Смайлик" в окно каждой игры. При нажатии всплывает меню с 4-6 эмодзи (👍, 😂, 😭, 🤔, GG).
+2.  **Сеть**: При выборе отправляем JSON: `{"type": "emote", "emoji": "👍"}`.
+3.  **Анимация**: Когда приходит эмодзи, оно появляется по центру доски, плавно поднимается вверх и исчезает (Fade Out).
+
+---
+
+### Шаг 1: Виджет всплывающего Эмодзи (`core/emote_widget.py`)
+
+Создай этот файл. Это будет летающий `QLabel` с анимацией.
+
+```python
+from PyQt6.QtWidgets import QLabel, QGraphicsOpacityEffect
+from PyQt6.QtCore import Qt, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup
+
+class FloatingEmote(QLabel):
+    def __init__(self, parent, text, start_pos):
+        super().__init__(parent)
+        self.setText(text)
+        self.setFont(parent.font()) # Можно задать свой шрифт побольше
+        # Стиль эмодзи (большой, с тенью)
+        self.setStyleSheet("font-size: 64px; color: white; background: transparent;")
+        self.adjustSize()
+
+        # Центрируем относительно start_pos
+        self.move(start_pos.x() - self.width() // 2, start_pos.y() - self.height() // 2)
+        self.show()
+
+        # Эффект прозрачности
+        self.opacity = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity)
+
+        # Анимация Движения (вверх)
+        self.anim_pos = QPropertyAnimation(self, b"pos")
+        self.anim_pos.setDuration(1500)
+        self.anim_pos.setStartValue(self.pos())
+        self.anim_pos.setEndValue(QPoint(self.pos().x(), self.pos().y() - 100))
+        self.anim_pos.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+        # Анимация Исчезновения
+        self.anim_fade = QPropertyAnimation(self.opacity, b"opacity")
+        self.anim_fade.setDuration(1500)
+        self.anim_fade.setStartValue(1.0)
+        self.anim_fade.setEndValue(0.0)
+        self.anim_fade.setEasingCurve(QEasingCurve.Type.InQuad)
+
+        # Группа (запускаем вместе)
+        self.group = QParallelAnimationGroup()
+        self.group.addAnimation(self.anim_pos)
+        self.group.addAnimation(self.anim_fade)
+        self.group.finished.connect(self.deleteLater)
+        self.group.start()
+```
+
+---
+
+### Шаг 2: Интеграция в Игры (на примере Шахмат/Шашек)
+
+Тебе нужно добавить кнопку чата и обработку сообщений.
+Я покажу на примере `ChessGame`, в остальных играх (`Checkers`, `TicTac`, `Battleship`) делается **абсолютно так же**.
+
+**А. Импорты в `ui.py`:**
+
+```python
+from PyQt6.QtWidgets import QMenu # <--- Добавить QMenu
+from PyQt6.QtGui import QAction   # <--- Добавить QAction
+from core.emote_widget import FloatingEmote # <--- Добавить наш виджет
+# ...
+```
+
+**Б. Кнопка в `__init__`:**
+
+Добавь кнопку рядом с `status_label` или внизу.
+
+```python
+    def __init__(self, ...):
+        # ...
+
+        # Кнопка Эмоций (Справа сверху или в layout)
+        # Лучше добавить HBox для заголовка, чтобы кнопка была сбоку
+
+        # (Если у тебя статус просто добавлен в main_layout, можно сделать так):
+        header_layout = QHBoxLayout()
+        header_layout.addWidget(self.status_label)
+
+        self.btn_emote = QPushButton("😀")
+        self.btn_emote.setFixedSize(40, 40)
+        self.btn_emote.setStyleSheet("background: rgba(255,255,255,30); border-radius: 20px; font-size: 20px;")
+        self.btn_emote.clicked.connect(self.show_emote_menu)
+        header_layout.addWidget(self.btn_emote)
+
+        # Вставляем header_layout вместо status_label (если он был addWidget)
+        # self.main_layout.addWidget(self.status_label) <--- ЗАМЕНИТЬ НА:
+        self.main_layout.addLayout(header_layout)
+
+        # ...
+```
+
+**В. Метод показа меню:**
+
+```python
+    def show_emote_menu(self):
+        menu = QMenu(self)
+        # Стиль меню
+        menu.setStyleSheet("""
+            QMenu { background-color: #2c3e50; color: white; border: 1px solid #555; }
+            QMenu::item { padding: 5px 20px; font-size: 24px; }
+            QMenu::item:selected { background-color: #34495e; }
+        """)
+
+        emojis = ["👍", "😂", "😭", "🤔", "😡", "GG"]
+        for em in emojis:
+            action = QAction(em, self)
+            action.triggered.connect(lambda ch, e=em: self.send_emote(e))
+            menu.addAction(action)
+
+        # Показываем под кнопкой
+        menu.exec(self.btn_emote.mapToGlobal(QPoint(0, self.btn_emote.height())))
+
+    def send_emote(self, emoji):
+        # Показываем у себя
+        self.show_floating_emote(emoji, is_mine=True)
+
+        # Отправляем
+        if self.is_online and self.network:
+            self.network.send_json({"type": "game_emote", "emoji": emoji})
+```
+
+**Г. Метод отображения (`show_floating_emote`):**
+
+```python
+    def show_floating_emote(self, emoji, is_mine):
+        # Центр окна
+        center = self.rect().center()
+
+        # Если это я - чуть правее, если враг - чуть левее (опционально)
+        # Но проще просто по центру доски
+
+        FloatingEmote(self, emoji, center)
+
+        # Звук (опционально)
+        # SoundManager().play("notification")
+```
+
+**Д. Обработка сети (`on_network_message`):**
+
+```python
+    def on_network_message(self, data):
+        # ... (старые проверки) ...
+
+        # НОВАЯ ПРОВЕРКА
+        if isinstance(data, dict) and data.get("type") == "game_emote":
+            emoji = data.get("emoji")
+            self.show_floating_emote(emoji, is_mine=False)
+```
+
+---
+
+### Шаг 3: Обновление `main.py` (Лаунчер)
+
+Лаунчер должен уметь пересылать сообщения типа `game_emote` в игру.
+
+В методе `on_server_data`:
+
+```python
+        elif dtype == "game_emote" and self.active_game:
+            self.active_game.on_network_message(data)
+            # Логируем
+            emoji = data.get("emoji")
+            self.add_to_log(f"Соперник: {emoji}")
+```
+
+И в `on_client_data` (свои эмоции):
+
+```python
+    def on_client_data(self, data):
+        if data.get("type") == "game_emote":
+            emoji = data.get("emoji")
+            self.add_to_log(f"Вы: {emoji}")
+
+        # ... (старый код game_move) ...
+```
+
+---
+
+### Шаг 4: Обновление `server.py`
+
+Сервер должен пересылать этот новый тип сообщений.
+Добавь `game_emote` в список разрешенных типов для пересылки.
+
+```python
+                # 9. ИГРА (Ходы)
+                elif ctype in ["game_move", "game_emote"]: # <--- ДОБАВИЛИ СЮДА
+                    lid = clients[writer]["current_lobby"]
+                    if lid and lid in lobbies:
+                        await pass_to_opponent(writer, lobbies[lid], data)
+```
+
+Теперь игроки могут спамить смайликами, и они будут красиво вылетать на экране и писаться в лог.

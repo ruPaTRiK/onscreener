@@ -1,12 +1,19 @@
 import sys
 import os
 import json
+import urllib.request
+import threading
+import ssl
+from core.server_dialog import ServerSelectDialog
+
+from core.updater import AutoUpdater
+
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGridLayout, QScrollArea, QFrame,
                              QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
                              QCheckBox, QMessageBox)
 from PyQt6.QtGui import QFont, QColor, QIcon
-from PyQt6.QtCore import Qt, QTimer, QDateTime
+from PyQt6.QtCore import Qt, QTimer, QDateTime, pyqtSignal
 
 from core.base_window import OverlayWindow
 from core.network import NetworkClient
@@ -18,6 +25,9 @@ from games_config import GAMES_CONFIG
 from core.settings_panel import SettingsPanel
 from core.settings import SettingsManager
 from core.sound_manager import SoundManager
+
+
+CURRENT_VERSION = "0.7"
 
 
 # --- ВИДЖЕТ АКТИВНОЙ ИГРЫ (Снизу слева) ---
@@ -84,6 +94,8 @@ class GameCard(QFrame):
 
 # --- ЛАУНЧЕР ---
 class Launcher(OverlayWindow):
+    servers_loaded = pyqtSignal(list)
+
     def __init__(self):
         super().__init__(overlay_mode=False)
         self.setWindowTitle("onscreener")
@@ -100,6 +112,7 @@ class Launcher(OverlayWindow):
         self.network.connected.connect(self.on_connected)
         self.network.disconnected.connect(self.on_disconnected)
         self.network.error_occurred.connect(self.on_net_error)
+        self.servers_loaded.connect(self.finish_loading_servers)
 
         self.user_name = "Player"
         self.my_id_in_lobby = None  # ID (1 или 2), который выдал сервер
@@ -115,10 +128,13 @@ class Launcher(OverlayWindow):
         snd.set_volume(sm.get("volume"))
         snd.muted = sm.get("mute")
 
+        self.servers_list = []
+        self.current_server_name = "Локальный"
+
         self.init_ui()
 
         # Автоподключение
-        QTimer.singleShot(500, self.network.connect_auto)
+        self.fetch_server_list_and_connect()
 
     def init_ui(self):
         self.central_widget = QWidget()
@@ -195,6 +211,15 @@ class Launcher(OverlayWindow):
         btn_settings = QPushButton("⚙")
         btn_settings.clicked.connect(self.settings_panel.toggle)
         self.left_layout.addWidget(btn_settings)
+
+        btn_srv = QPushButton("🌐")
+        btn_srv.setFixedSize(40, 40)
+        btn_srv.setToolTip("Сменить сервер")
+        btn_srv.clicked.connect(self.open_server_dialog)
+        btn_srv.setStyleSheet(
+            "QPushButton { background: transparent; font-size: 20px; border: none; color: #aaa; } QPushButton:hover { color: white; }")
+
+        self.left_layout.addWidget(btn_srv)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -339,6 +364,95 @@ class Launcher(OverlayWindow):
             if c > 2: c = 0; r += 1
 
     # --- СЕТЕВЫЕ СОБЫТИЯ ---
+    def fetch_server_list_and_connect(self):
+        def worker():
+            try:
+                url = "https://gist.githubusercontent.com/ruPaTRiK/fba2f42d20c7bb8893793928c3257880/raw/447c87e796460f816456de55d2235b5b7081d043/servers.json"
+
+                req = urllib.request.Request(
+                    url,
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                )
+
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+
+
+                with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
+                    text_data = response.read().decode('utf-8')
+                    data = json.loads(text_data)
+
+                    self.servers_loaded.emit(data)
+
+            except Exception as e:
+                self.servers_loaded.emit([])
+
+        t = threading.Thread(target=self._thread_loader, args=(worker,))
+        t.daemon = True
+        t.start()
+
+    def _thread_loader(self, worker):
+        data = worker()
+        # Возвращаемся в GUI поток
+        QTimer.singleShot(0, lambda: self.finish_loading_servers(data))
+
+    def update_progress(self, percent):
+        self.setWindowTitle(f"Скачивание обновления... {percent}%")
+
+    def finish_loading_servers(self, raw_data):
+        servers = []
+
+        if isinstance(raw_data, dict):
+            remote_ver = raw_data.get("version", "0.0")
+            download_url = raw_data.get("url", "")
+            servers = raw_data.get("servers", [])
+
+            # ПРОВЕРКА ОБНОВЛЕНИЯ
+            updater = AutoUpdater(CURRENT_VERSION)
+            if updater.is_update_available(remote_ver):
+                reply = QMessageBox.question(
+                    self, "Обновление",
+                    f"Доступна новая версия {remote_ver}.\nОбновить сейчас?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.notifications.show("Обновление", "Скачивание новой версии...", "info")
+                    QApplication.processEvents()
+
+                    if updater.download_update(download_url, self.update_progress):
+                        updater.restart_and_replace()
+                    else:
+                        self.notifications.show("Ошибка", "Не удалось скачать обновление", "error")
+
+        elif isinstance(raw_data, list):
+            servers = raw_data
+
+        self.servers_list = servers
+
+        if self.servers_list:
+            srv = self.servers_list[0]
+            ip = srv['ip']
+            port = srv.get('port', 5555)
+
+            self.notifications.show("Сервер", f"Подключение к: {srv['name']}...", "info")
+            self.network.connect_to(ip, port)
+        else:
+            self.network.connect_to("127.0.0.1", 5555)
+
+    def open_server_dialog(self):
+        dlg = ServerSelectDialog(self, self.servers_list)
+        if dlg.exec():
+            ip = dlg.result_ip
+            port = dlg.result_port
+            if ip:
+                self.network.disconnect()  # Рвем старое
+
+                self.notifications.show("Сервер", f"Переподключение к {ip}...", "info")
+                # Небольшая задержка перед новым коннектом
+                QTimer.singleShot(500, lambda: self.network.connect_to(ip, port))
+
     def on_connected(self):
         self.network.send_json({"type": "login", "name": self.name_inp.text()})
         self.notifications.show("Сервер", "Подключено успешно!", "success")
