@@ -3,6 +3,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QBrush
 from PyQt6.QtCore import Qt, QRect, QPropertyAnimation, QEasingCurve
 from core.base_window import OverlayWindow
 from games.chess.logic import ChessLogic
+from core.sound_manager import SoundManager
 
 
 class ChessGame(OverlayWindow):
@@ -249,6 +250,7 @@ class ChessGame(OverlayWindow):
             if (self.logic.turn == 'white' and color == 'w') or \
                     (self.logic.turn == 'black' and color == 'b'):
                 self.selected_piece = (row, col)
+                # SoundManager().play("capture")
                 self.valid_moves = self.logic.get_valid_moves(row, col)
         else:
             self.selected_piece = None
@@ -362,3 +364,4 @@ class ChessGame(OverlayWindow):
         floater.deleteLater()
         self.hidden_piece_pos = None
         self._update_ui()
+        SoundManager().play("move")

@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QPushButton, QGraphicsOpacityEffect, QStyleOption, QStyle
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint, QSize
 from PyQt6.QtGui import QIcon, QFont, QColor, QPainter
+from core.sound_manager import SoundManager
 
 
 class ToastNotification(QWidget):
@@ -79,6 +80,8 @@ class ToastNotification(QWidget):
         self.anim.setEndValue(1)
         self.anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.anim.start()
+
+        SoundManager().play("notification")
 
     def close_toast(self):
         # Анимация исчезновения

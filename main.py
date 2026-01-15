@@ -15,6 +15,10 @@ from core.lobby_dialogs import CreateLobbyDialog, PasswordDialog
 from core.notifications import NotificationManager
 from games_config import GAMES_CONFIG
 
+from core.settings_panel import SettingsPanel
+from core.settings import SettingsManager
+from core.sound_manager import SoundManager
+
 
 # --- ВИДЖЕТ АКТИВНОЙ ИГРЫ (Снизу слева) ---
 class ActiveGameItem(QFrame):
@@ -106,6 +110,11 @@ class Launcher(OverlayWindow):
         self.active_game_id = None
         self.game_cards = {}  # {game_id: card_widget}
 
+        sm = SettingsManager()
+        snd = SoundManager()
+        snd.set_volume(sm.get("volume"))
+        snd.muted = sm.get("mute")
+
         self.init_ui()
 
         # Автоподключение
@@ -169,6 +178,9 @@ class Launcher(OverlayWindow):
         self.main_h_layout.setContentsMargins(0, 0, 0, 0)
         self.main_h_layout.setSpacing(0)
 
+        self.settings_panel = SettingsPanel(self)
+        self.settings_panel.opacity_changed.connect(self.update_game_opacity)
+
         # === ЛЕВАЯ ЧАСТЬ (ИГРЫ) ===
         self.left_panel = QWidget()
         self.left_layout = QVBoxLayout(self.left_panel)
@@ -179,6 +191,10 @@ class Launcher(OverlayWindow):
         header.setFont(QFont("Arial", 22, QFont.Weight.Bold))
         header.setStyleSheet("color: #EAEAEA;")
         self.left_layout.addWidget(header)
+
+        btn_settings = QPushButton("⚙")
+        btn_settings.clicked.connect(self.settings_panel.toggle)
+        self.left_layout.addWidget(btn_settings)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -311,6 +327,8 @@ class Launcher(OverlayWindow):
 
         self.main_h_layout.addWidget(self.right_panel, stretch=1)
 
+        self.main_h_layout.addWidget(self.settings_panel)
+
     def load_games(self):
         r, c = 0, 0
         for game in GAMES_CONFIG:
@@ -403,9 +421,17 @@ class Launcher(OverlayWindow):
                 self.active_game.swap_sides(new_color)
                 self.notifications.show("Рестарт", "Смена сторон!", "success")
 
+        elif dtype == "game_emote" and self.active_game:
+            self.active_game.on_network_message(data)
+            emoji = data.get("emoji")
+            self.add_to_log(f"Соперник: {emoji}")
+
     def on_client_data(self, data):
         if data.get("type") == "game_move" and self.active_game:
             self.process_log_entry(data, "Вы")
+        if data.get("type") == "game_emote":
+            emoji = data.get("emoji")
+            self.add_to_log(f"Вы: {emoji}")
 
     def update_name(self):
         if self.network.is_running:
@@ -512,6 +538,8 @@ class Launcher(OverlayWindow):
             game_class = game_data["class"]
             win = game_class()
             win.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            op = SettingsManager().get("window_opacity")
+            win.setWindowOpacity(op)
             win.show()
             self.add_active_game_widget(win, game_data["title"])
             return
@@ -545,6 +573,8 @@ class Launcher(OverlayWindow):
 
             self.active_game = game_class(is_online=True, is_host=play_as_white, network_client=self.network)
             self.active_game.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+            op = SettingsManager().get("window_opacity")
+            self.active_game.setWindowOpacity(op)
             self.active_game.show()
             self.add_active_game_widget(self.active_game, f"{game_conf['title']} (Online)")
 
@@ -672,6 +702,10 @@ class Launcher(OverlayWindow):
     def resizeEvent(self, event):
         self.notifications.reposition_toasts()
         super().resizeEvent(event)
+
+    def update_game_opacity(self, opacity):
+        if self.active_game:
+            self.active_game.setWindowOpacity(opacity)
 
 
 if __name__ == "__main__":

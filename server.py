@@ -272,7 +272,7 @@ async def handle_client(reader, writer):
                     await broadcast_lobby_list()
 
             # 9. ИГРА (Ходы)
-            elif ctype == "game_move":
+            elif ctype in ["game_move", "game_emote"]:
                 lid = clients[writer]["current_lobby"]
                 if lid and lid in lobbies:
                     await pass_to_opponent(writer, lobbies[lid], data)

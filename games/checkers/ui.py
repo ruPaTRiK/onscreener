@@ -3,6 +3,7 @@ from PyQt6.QtGui import QPixmap, QPainter, QBrush, QColor, QFont, QPen
 from PyQt6.QtCore import Qt, QRect, QPoint, QPropertyAnimation, QEasingCurve, QTimer
 from core.base_window import OverlayWindow
 from games.checkers.logic import CheckersLogic
+from core.sound_manager import SoundManager
 
 
 class CheckersGame(OverlayWindow):
@@ -374,3 +375,4 @@ class CheckersGame(OverlayWindow):
         floater.deleteLater()  # Удаляем летуна
         self.hidden_piece_pos = None  # Снимаем скрытие
         self._update_ui()  # Рисуем доску нормально
+        SoundManager().play("move")

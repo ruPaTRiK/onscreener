@@ -1,3 +1,5 @@
+from core.sound_manager import SoundManager
+
 class BattleshipLogic:
     def __init__(self):
         # Конфигурация флота: {id: size}
@@ -18,7 +20,7 @@ class BattleshipLogic:
         self.placed_ships = {}
 
         self.total_health = sum(ship["size"] for ship in self.fleet_config)
-        print(f"DEBUG: Игра началась. Всего жизней: {self.total_health}")
+        # print(f"DEBUG: Игра началась. Всего жизней: {self.total_health}")
 
         self.my_hits_taken = 0
         self.enemy_hits_made = 0
@@ -105,6 +107,7 @@ class BattleshipLogic:
         if cell == 0:
             self.my_board[r][c] = -1  # Промах
             self.my_turn = True
+            SoundManager().play("miss")
             return "miss", None
 
         elif cell > 0:
@@ -112,7 +115,9 @@ class BattleshipLogic:
             self.my_board[r][c] = -2  # Попадание
             self.my_hits_taken += 1
 
-            print(f"DEBUG: Меня ранили! Урон: {self.my_hits_taken}/{self.total_health}")
+            SoundManager().play("boom")
+
+            # print(f"DEBUG: Меня ранили! Урон: {self.my_hits_taken}/{self.total_health}")
 
             # Проверяем, убит ли корабль целиком
             ship_dead = self._is_ship_dead(ship_id)
@@ -138,20 +143,23 @@ class BattleshipLogic:
         if status == "miss":
             self.enemy_view[r][c] = 1
             self.my_turn = False
+            SoundManager().play("miss")
 
         elif status == "hit":
             self.enemy_view[r][c] = 2
             self.enemy_hits_made += 1
+            SoundManager().play("boom")
 
         elif status == "kill":
             self.enemy_view[r][c] = 2
             self.enemy_hits_made += 1
+            SoundManager().play("boom")
             if ship_data:
                 self._mark_enemy_dead_ship(ship_data)
 
         if status in ["hit", "kill"]:
             # --- DEBUG PRINT ---
-            print(f"DEBUG: Я попал! Мой счет: {self.enemy_hits_made}/{self.total_health}")
+            # print(f"DEBUG: Я попал! Мой счет: {self.enemy_hits_made}/{self.total_health}")
 
             if self.enemy_hits_made >= self.total_health:
                 print("DEBUG: Я ПОБЕДИЛ!")
