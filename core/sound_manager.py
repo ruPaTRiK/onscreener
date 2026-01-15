@@ -1,4 +1,5 @@
 import os
+import sys
 from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6.QtCore import QUrl
 
@@ -15,6 +16,15 @@ class SoundManager:
             cls._instance.load_sounds()
         return cls._instance
 
+    def resource_path(self, relative_path):
+        """Получает путь к ресурсам внутри EXE или в папке проекта"""
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+
+        return os.path.join(base_path, relative_path)
+
     def load_sounds(self):
         # Список звуков и путей (относительно assets/sounds/)
         sound_files = {
@@ -29,16 +39,12 @@ class SoundManager:
             "boom": "shipExplode.wav"  # Попадание (Морской бой)
         }
 
-        base_path = os.path.join(os.getcwd(), "assets", "sounds")
-        if not os.path.exists(base_path):
-            print(f"Папка звуков не найдена: {base_path}")
-            return
-
         for name, filename in sound_files.items():
-            path = os.path.join(base_path, filename)
-            if os.path.exists(path):
+            full_path = self.resource_path(os.path.join("assets", "sounds", filename))
+
+            if os.path.exists(full_path):
                 effect = QSoundEffect()
-                effect.setSource(QUrl.fromLocalFile(path))
+                effect.setSource(QUrl.fromLocalFile(full_path))
                 effect.setVolume(self.volume)
                 self.sounds[name] = effect
             else:

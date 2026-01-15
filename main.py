@@ -7,6 +7,7 @@ import ssl
 from core.server_dialog import ServerSelectDialog
 
 from core.updater import AutoUpdater
+from core.update_dialog import UpdateProgressDialog
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGridLayout, QScrollArea, QFrame,
@@ -27,7 +28,7 @@ from core.settings import SettingsManager
 from core.sound_manager import SoundManager
 
 
-CURRENT_VERSION = "0.7"
+CURRENT_VERSION = "0.71"
 
 
 # --- ВИДЖЕТ АКТИВНОЙ ИГРЫ (Снизу слева) ---
@@ -397,8 +398,27 @@ class Launcher(OverlayWindow):
         # Возвращаемся в GUI поток
         QTimer.singleShot(0, lambda: self.finish_loading_servers(data))
 
-    def update_progress(self, percent):
-        self.setWindowTitle(f"Скачивание обновления... {percent}%")
+    def run_update_thread(self, updater, url):
+        # Callback для обновления прогресса из потока
+        def progress_callback(percent):
+            # QMetaObject.invokeMethod - безопасный способ обновить GUI из потока
+            # Но проще через сигнал или QTimer
+            QTimer.singleShot(0, lambda: self.update_dlg.set_progress(percent))
+
+        success = updater.download_update(url, progress_callback)
+
+        # Завершение
+        QTimer.singleShot(0, lambda: self.finish_update(updater, success))
+
+    def finish_update(self, updater, success):
+        self.update_dlg.close()
+
+        if success:
+            self.notifications.show("Обновление", "Установка...", "success")
+            # Даем секунду на отрисовку уведомления
+            QTimer.singleShot(1000, updater.restart_and_replace)
+        else:
+            self.notifications.show("Ошибка", "Не удалось скачать обновление", "error")
 
     def finish_loading_servers(self, raw_data):
         servers = []
@@ -418,13 +438,12 @@ class Launcher(OverlayWindow):
                 )
 
                 if reply == QMessageBox.StandardButton.Yes:
-                    self.notifications.show("Обновление", "Скачивание новой версии...", "info")
-                    QApplication.processEvents()
-
-                    if updater.download_update(download_url, self.update_progress):
-                        updater.restart_and_replace()
-                    else:
-                        self.notifications.show("Ошибка", "Не удалось скачать обновление", "error")
+                    self.update_dlg = UpdateProgressDialog(self)
+                    self.update_dlg.show()
+                    t = threading.Thread(target=self.run_update_thread, args=(updater, download_url))
+                    t.daemon = True
+                    t.start()
+                    return
 
         elif isinstance(raw_data, list):
             servers = raw_data
