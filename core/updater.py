@@ -1,30 +1,35 @@
 import sys
 import os
-import urllib.request
 import subprocess
+import urllib.request
 import ssl
+import shutil
+import tempfile
 
 
 class AutoUpdater:
     def __init__(self, current_version):
         self.current_version = current_version
-        self.new_exe_name = "update_temp.exe"
-        self.bat_name = "update_script.bat"
+        # Скачиваем во временную папку системы, чтобы не мусорить рядом с exe
+        self.temp_dir = tempfile.gettempdir()
+        self.new_exe_name = os.path.join(self.temp_dir, "update_temp.exe")
 
     def is_update_available(self, remote_version):
-        # Простое сравнение строк или чисел
-        # Если 1.1 > 1.0
         return str(remote_version) > str(self.current_version)
 
     def download_update(self, url, progress_callback=None):
         try:
-            # Игнор SSL (как в лаунчере)
+            print(f"DEBUG: Скачивание {url} в {self.new_exe_name}")
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
 
-            # Скачиваем во временный файл
-            with urllib.request.urlopen(url, context=ctx) as response:
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+            )
+
+            with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
                 total_size = int(response.info().get('Content-Length', 0))
                 downloaded = 0
                 block_size = 8192
@@ -35,63 +40,47 @@ class AutoUpdater:
                         if not buffer: break
                         downloaded += len(buffer)
                         f.write(buffer)
-
                         if progress_callback and total_size > 0:
                             percent = int(downloaded * 100 / total_size)
                             progress_callback(percent)
-
             return True
         except Exception as e:
-            print(f"Ошибка обновления: {e}")
+            print(f"Update error: {e}")
             return False
 
-    def restart_and_replace(self):
-        import sys
-        import os
-        import subprocess
+    def get_resource_path(self, relative_path):
+        """Находит updater.exe внутри упакованного приложения"""
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+        return os.path.join(base_path, relative_path)
 
-        current_exe = os.path.abspath(sys.executable)  # АБСОЛЮТНЫЙ путь
-        exe_dir = os.path.dirname(current_exe)
-        exe_name = os.path.basename(current_exe)
-        new_exe_path = os.path.abspath(self.new_exe_name)  # АБСОЛЮТНЫЙ путь
+    def restart_and_replace(self):
+        # 1. Определяем пути
+        current_exe = os.path.abspath(sys.executable)
         pid = os.getpid()
 
-        bat_script = f'''@echo off
-        cd /d "{exe_dir}"
+        # 2. Достаем updater.exe из ресурсов
+        bundled_updater = self.get_resource_path(os.path.join("assets", "updater.exe"))
+        extracted_updater = os.path.join(self.temp_dir, "updater_tool.exe")
 
-        REM Ждём смерти процесса
-        :loop
-        tasklist /FI "PID eq {pid}" 2^>NUL | find /I /N "{pid}" >NUL
-        if "%ERRORLEVEL%"=="0" (
-            timeout /t 2 /nobreak >NUL
-            goto loop
-        )
+        try:
+            shutil.copy2(bundled_updater, extracted_updater)
+        except Exception as e:
+            print(f"Ошибка извлечения апдейтера: {e}")
+            # Если не вышло (например, запускаем из IDE), попробуем найти рядом
+            if os.path.exists("assets/updater.exe"):
+                extracted_updater = os.path.abspath("assets/updater.exe")
+            else:
+                return  # Нечего запускать
 
-        REM Длинная пауза - даём системе полностью освободить файлы (критично!)
-        timeout /t 5 /nobreak >NUL
+        # 3. Запускаем updater.exe
+        # Аргументы: [PID, Куда_ставить, Откуда_брать]
+        args = [extracted_updater, str(pid), current_exe, self.new_exe_name]
 
-        REM Очищаем ВСЕ старые _MEI папки этого пользователя (профилактика)
-        for /d %%i in ("%TEMP%\*MEI*") do rd /s /q "%%i" 2>nul
+        print(f"Запуск апдейтера: {args}")
+        subprocess.Popen(args)
 
-        REM Ещё пауза для нового TEMP
-        timeout /t 3 /nobreak >NUL
-
-        REM Теперь заменяем
-        :try_move
-        move /Y "{new_exe_path}" "{current_exe}" >NUL 2>&1
-        if errorlevel 1 (
-            timeout /t 2 /nobreak >NUL
-            goto try_move
-        )
-
-        REM Запускаем
-        start "" "{current_exe}"
-        del "%~f0"
-        '''
-
-        with open(self.bat_name, "w", encoding='utf-8') as f:
-            f.write(bat_script)
-
-        # Запускаем с явной рабочей директорией
-        subprocess.Popen([self.bat_name], cwd=exe_dir, shell=True)
+        # 4. Выходим
         os._exit(0)

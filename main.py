@@ -28,7 +28,7 @@ from core.settings import SettingsManager
 from core.sound_manager import SoundManager
 
 
-CURRENT_VERSION = "0.7"
+CURRENT_VERSION = "0.71"
 
 
 # --- ВИДЖЕТ АКТИВНОЙ ИГРЫ (Снизу слева) ---
@@ -102,8 +102,6 @@ class Launcher(OverlayWindow):
 
     def __init__(self):
         super().__init__(overlay_mode=False)
-
-        self.cleanup_old_version()
 
         self.setWindowTitle("onscreener")
         self.setWindowFlags(Qt.WindowType.Window)
@@ -474,28 +472,6 @@ class Launcher(OverlayWindow):
             self.network.connect_to(ip, port)
         else:
             self.network.connect_to("127.0.0.1", 5555)
-
-    def cleanup_old_version(self):
-        """Удаляет старый файл .old после обновления"""
-        try:
-            current_exe = sys.executable
-            old_exe = current_exe + ".old"
-
-            if os.path.exists(old_exe):
-                # Пробуем удалить. Если он еще занят закрывающимся процессом,
-                # попробуем через секунду через QTimer
-                def try_delete():
-                    try:
-                        if os.path.exists(old_exe):
-                            os.remove(old_exe)
-                            print("DEBUG: Старая версия удалена.")
-                    except:
-                        # Если не вышло, пробуем еще раз через 2 секунды
-                        QTimer.singleShot(2000, try_delete)
-
-                try_delete()
-        except:
-            pass
 
     def open_server_dialog(self):
         dlg = ServerSelectDialog(self, self.servers_list)
