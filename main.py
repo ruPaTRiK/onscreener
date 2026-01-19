@@ -12,9 +12,10 @@ from core.update_dialog import UpdateProgressDialog
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGridLayout, QScrollArea, QFrame,
                              QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
-                             QCheckBox, QMessageBox)
+                             QCheckBox, QMessageBox, QButtonGroup, QGraphicsOpacityEffect,
+                             QGraphicsDropShadowEffect)
 from PyQt6.QtGui import QFont, QColor, QIcon
-from PyQt6.QtCore import Qt, QTimer, QDateTime, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QDateTime, pyqtSignal, QPropertyAnimation, QEasingCurve, QPoint
 
 from core.base_window import OverlayWindow
 from core.network import NetworkClient
@@ -53,40 +54,106 @@ class ActiveGameItem(QFrame):
 
 
 # --- КАРТОЧКА ИГРЫ ---
-class GameCard(QFrame):
+class GameCard(QWidget):  # Внешний контейнер - QWidget (прозрачный)
     def __init__(self, game_data, on_click_callback):
         super().__init__()
         self.game_data = game_data
         self.on_click_callback = on_click_callback
-        self.setFixedSize(180, 100)
+
+        # Размер карточки + запас под тень (по 10px с каждой стороны)
+        self.setFixedSize(240, 160)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.is_selected = False
 
-        self.default_style = self._get_style("#3E3E50")
-        self.selected_style = self._get_style("#2ed573")  # Зеленая рамка
+        # ВНУТРЕННИЙ ФРЕЙМ (Сама карточка)
+        self.card = QFrame(self)
+        self.card.setGeometry(10, 10, 220, 140)  # Отступ 10px
 
-        self.setStyleSheet(self.default_style)
+        # Стиль для внутренней карточки
+        # Сохраняем стиль в переменную, чтобы восстанавливать при leaveEvent
+        self.default_style = """
+            QFrame {
+                background-color: #1a1a3a;
+                border: 1px solid #2a2a4a;
+                border-radius: 15px;
+            }
+        """
+        self.hover_style = """
+            QFrame {
+                background-color: #202040;
+                border: 1px solid #6366f1;
+                border-radius: 15px;
+            }
+        """
+        self.card.setStyleSheet(self.default_style)
 
-        layout = QVBoxLayout(self)
-        layout.addStretch()
-        title = QLabel(game_data["title"])
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        title.setStyleSheet("background-color: rgba(0,0,0,150); color: white; border-radius: 5px; border: none; padding: 5px 0;")
-        layout.addWidget(title)
+        # ЛЭЙАУТ ВНУТРИ КАРТОЧКИ
+        layout = QVBoxLayout(self.card)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-    def _get_style(self, border_color):
-        bg = ""
-        if os.path.exists(self.game_data["image"]):
-            path = self.game_data["image"].replace("\\", "/")
-            bg = f"border-image: url({path}) 0 0 0 0 stretch;"
+        # Картинка
+        img_path = game_data.get("image", "")
+        bg_image = ""
+        if os.path.exists(img_path):
+            img_path = img_path.replace("\\", "/")
+            bg_image = f"border-image: url({img_path}) 0 0 0 0 stretch;"
         else:
-            bg = f"background-color: {self.game_data.get('color', '#555')};"
-        return f"QFrame {{ {bg} border-radius: 10px; border: 3px solid {border_color}; }}"
+            bg_image = "background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #555, stop:1 #333);"
 
-    def set_selected(self, selected):
-        self.is_selected = selected
-        self.setStyleSheet(self.selected_style if selected else self.default_style)
+        self.image_lbl = QLabel()
+        self.image_lbl.setStyleSheet(f"""
+            QLabel {{
+                {bg_image}
+                border-top-left-radius: 15px;
+                border-top-right-radius: 15px;
+            }}
+        """)
+        layout.addWidget(self.image_lbl, stretch=1)
+
+        # Текст
+        title_lbl = QLabel(game_data["title"])
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_lbl.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        title_lbl.setStyleSheet("color: white; padding: 8px; background: transparent; border: none;")
+        layout.addWidget(title_lbl)
+
+        # ЭФФЕКТ ТЕНИ (Теперь безопасно)
+        self.shadow = QGraphicsDropShadowEffect(self.card)
+        self.shadow.setBlurRadius(15)
+        self.shadow.setXOffset(0)
+        self.shadow.setYOffset(5)
+        self.shadow.setColor(QColor(0, 0, 0, 100))
+        self.card.setGraphicsEffect(self.shadow)
+
+        # Анимация позиции (для всплытия)
+        self.anim_pos = QPropertyAnimation(self.card, b"pos")
+        self.anim_pos.setDuration(200)
+        self.anim_pos.setEasingCurve(QEasingCurve.Type.OutQuad)
+
+    def enterEvent(self, event):
+        # 1. Меняем стиль (цвет рамки)
+        self.card.setStyleSheet(self.hover_style)
+
+        # 2. Цвет тени (Свечение)
+        self.shadow.setColor(QColor(99, 102, 241, 150))  # Индиго
+        self.shadow.setBlurRadius(30)
+
+        # 3. Поднимаем карточку (уменьшаем Y на 5px)
+        self.anim_pos.stop()
+        self.anim_pos.setStartValue(self.card.pos())
+        self.anim_pos.setEndValue(QPoint(10, 5))  # Было 10, стало 5 (вверх)
+        self.anim_pos.start()
+
+    def leaveEvent(self, event):
+        # Возврат
+        self.card.setStyleSheet(self.default_style)
+        self.shadow.setColor(QColor(0, 0, 0, 100))
+        self.shadow.setBlurRadius(15)
+
+        self.anim_pos.stop()
+        self.anim_pos.setStartValue(self.card.pos())
+        self.anim_pos.setEndValue(QPoint(10, 10))  # Обратно вниз
+        self.anim_pos.start()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -145,230 +212,750 @@ class Launcher(OverlayWindow):
 
     def init_ui(self):
         self.central_widget = QWidget()
+        self.central_widget.setObjectName("CentralWidget")
+        self.central_widget.setStyleSheet("background-color: #0d0d1a;")
         self.setCentralWidget(self.central_widget)
 
-        scrollbar_style = """
-                    /* ВЕРТИКАЛЬНЫЙ СКРОЛЛБАР */
-                    QScrollBar:vertical {
-                        border: none;
-                        background: rgba(0, 0, 0, 30); /* Прозрачный темный фон трека */
-                        width: 10px;                   /* Тонкий */
-                        margin: 0px 0px 0px 0px;
-                    }
-                    /* Ползунок */
-                    QScrollBar::handle:vertical {
-                        background: rgba(255, 255, 255, 50); /* Полупрозрачный белый */
-                        min-height: 20px;
-                        border-radius: 5px;            /* Закругления */
-                    }
-                    /* Ползунок при наведении */
-                    QScrollBar::handle:vertical:hover {
-                        background: rgba(255, 255, 255, 100); /* Ярче */
-                    }
-                    /* Скрываем кнопки вверх/вниз */
-                    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                        height: 0px;
-                    }
-                    QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                        background: none;
-                    }
+        # ГЛАВНЫЙ ГОРИЗОНТАЛЬНЫЙ СЛОЙ (Сайдбар | Контент)
+        self.root_layout = QHBoxLayout(self.central_widget)
+        self.root_layout.setContentsMargins(0, 0, 0, 0)
+        self.root_layout.setSpacing(0)
 
-                    /* ГОРИЗОНТАЛЬНЫЙ СКРОЛЛБАР */
-                    QScrollBar:horizontal {
-                        border: none;
-                        background: rgba(0, 0, 0, 30);
-                        height: 10px;
-                        margin: 0px 0px 0px 0px;
-                    }
-                    QScrollBar::handle:horizontal {
-                        background: rgba(255, 255, 255, 50);
-                        min-width: 20px;
-                        border-radius: 5px;
-                    }
-                    QScrollBar::handle:horizontal:hover {
-                        background: rgba(255, 255, 255, 100);
-                    }
-                    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                        width: 0px;
-                    }
-                    QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-                        background: none;
-                    }
-                """
-        self.setStyleSheet(scrollbar_style)
+        # === 1. ЛЕВАЯ НАВИГАЦИЯ (САЙДБАР) ===
+        self.setup_sidebar()
+        self.root_layout.addWidget(self.sidebar_frame)
 
-        self.main_h_layout = QHBoxLayout(self.central_widget)
-        self.main_h_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_h_layout.setSpacing(0)
+        # === 2. ОБЛАСТЬ КОНТЕНТА ===
+        self.main_stack = QStackedWidget()
+        self.root_layout.addWidget(self.main_stack)
 
-        self.settings_panel = SettingsPanel(self)
-        self.settings_panel.opacity_changed.connect(self.update_game_opacity)
+        # --- СТРАНИЦА 1: ИГРЫ ---
+        self.page_games = QWidget()
+        self.page_games.setStyleSheet("background: transparent;")
 
-        # === ЛЕВАЯ ЧАСТЬ (ИГРЫ) ===
-        self.left_panel = QWidget()
-        self.left_layout = QVBoxLayout(self.left_panel)
-        self.left_layout.setContentsMargins(20, 20, 20, 20)
+        self.game_page_layout = QHBoxLayout(self.page_games)
+        self.game_page_layout.setContentsMargins(0, 0, 0, 0)
+        self.game_page_layout.setSpacing(0)
 
-        header = QLabel("Коллекция Игр")
-        header.setObjectName("CollectionHeader")
-        header.setFont(QFont("Arial", 22, QFont.Weight.Bold))
-        header.setStyleSheet("color: #EAEAEA;")
-        self.left_layout.addWidget(header)
+        self.create_games_panel()
+        self.game_page_layout.addWidget(self.games_panel_widget, stretch=3)
+        self.create_online_panel()
+        self.game_page_layout.addWidget(self.online_panel_widget, stretch=1)
 
-        btn_settings = QPushButton("⚙")
-        btn_settings.clicked.connect(self.settings_panel.toggle)
-        self.left_layout.addWidget(btn_settings)
+        self.main_stack.addWidget(self.page_games)
 
-        btn_srv = QPushButton("🌐")
-        btn_srv.setFixedSize(40, 40)
-        btn_srv.setToolTip("Сменить сервер")
-        btn_srv.clicked.connect(self.open_server_dialog)
-        btn_srv.setStyleSheet(
-            "QPushButton { background: transparent; font-size: 20px; border: none; color: #aaa; } QPushButton:hover { color: white; }")
+        # --- СТРАНИЦА 2: ДРУЗЬЯ ---
+        self.page_friends = QLabel("Раздел Друзья (В разработке)")
+        self.page_friends.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_friends.setStyleSheet("color: #6b7280; font-size: 24px;")
+        self.main_stack.addWidget(self.page_friends)
 
-        self.left_layout.addWidget(btn_srv)
+        # --- СТРАНИЦА 3: НАСТРОЙКИ ---
+        self.page_settings = QLabel("Раздел Настройки")
+        self.page_settings.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_settings.setStyleSheet("color: #6b7280; font-size: 24px;")
+        self.main_stack.addWidget(self.page_settings)
 
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("background: transparent; border: none;")
-        self.grid_cont = QWidget()
-        self.grid_layout = QGridLayout(self.grid_cont)
+    def setup_sidebar(self):
+        self.sidebar_frame = QFrame()
+        self.sidebar_frame.setFixedWidth(70)  # w-16 ~ 64px, сделаем чуть шире для удобства
+        self.sidebar_frame.setObjectName("Sidebar")
+
+        # Стили (перевод твоего Tailwind в CSS)
+        self.sidebar_frame.setStyleSheet("""
+            QFrame#Sidebar {
+                background-color: #12122a; 
+                border-right: 1px solid #2a2a4a;
+            }
+            /* Кнопки навигации */
+            QPushButton {
+                border: none;
+                border-radius: 12px; /* rounded-xl */
+                background-color: transparent;
+                color: #6b7280; /* text-gray-500 */
+                font-size: 24px; /* Размер иконки */
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1a1a3a;
+                color: #e5e7eb;
+            }
+            /* Активная кнопка (checked) */
+            QPushButton:checked {
+                background-color: rgba(99, 102, 241, 0.2); /* bg-indigo-500/20 */
+                color: #818cf8; /* text-indigo-400 */
+            }
+
+            /* Логотип */
+            QLabel#Logo {
+                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:1, stop:0 #6366f1, stop:1 #9333ea);
+                border-radius: 12px;
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+            }
+        """)
+
+        layout = QVBoxLayout(self.sidebar_frame)
+        layout.setContentsMargins(10, 20, 10, 20)
+        layout.setSpacing(20)
+
+        # 1. Логотип (Градиентный квадрат)
+        lbl_logo = QLabel("G")
+        lbl_logo.setObjectName("Logo")
+        lbl_logo.setFixedSize(40, 40)
+        lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl_logo, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        layout.addSpacing(20)  # Отступ mb-8
+
+        # 2. Навигация
+        self.nav_group = QButtonGroup(self)
+        self.nav_group.setExclusive(True)
+
+        # Кнопка ИГРЫ
+        self.btn_nav_games = QPushButton("🎮")  # Или иконка
+        self.btn_nav_games.setFixedSize(40, 40)
+        self.btn_nav_games.setCheckable(True)
+        self.btn_nav_games.setChecked(True)  # Активна по умолчанию
+        self.btn_nav_games.setToolTip("Игры")
+        self.btn_nav_games.clicked.connect(lambda: self.main_stack.setCurrentIndex(0))
+        self.nav_group.addButton(self.btn_nav_games)
+        layout.addWidget(self.btn_nav_games, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # Кнопка ДРУЗЬЯ
+        self.btn_nav_friends = QPushButton("👥")
+        self.btn_nav_friends.setFixedSize(40, 40)
+        self.btn_nav_friends.setCheckable(True)
+        self.btn_nav_friends.setToolTip("Друзья")
+        self.btn_nav_friends.clicked.connect(lambda: self.main_stack.setCurrentIndex(1))
+        self.nav_group.addButton(self.btn_nav_friends)
+        layout.addWidget(self.btn_nav_friends, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # Кнопка НАСТРОЙКИ
+        self.btn_nav_settings = QPushButton("⚙")
+        self.btn_nav_settings.setFixedSize(40, 40)
+        self.btn_nav_settings.setCheckable(True)
+        self.btn_nav_settings.setToolTip("Настройки")
+        self.btn_nav_settings.clicked.connect(lambda: self.main_stack.setCurrentIndex(2))
+        self.nav_group.addButton(self.btn_nav_settings)
+        layout.addWidget(self.btn_nav_settings, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        layout.addStretch()  # Прижать все наверх
+
+    def create_games_panel(self):
+        self.games_panel_widget = QWidget()
+        # Основной вертикальный слой
+        layout = QVBoxLayout(self.games_panel_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # === 1. HEADER (Поиск и Заголовок) ===
+        header = QFrame()
+        header.setStyleSheet("""
+            QFrame {
+                background-color: rgba(13, 13, 26, 0.9); /* #0d0d1a/90 */
+                border-bottom: 1px solid #2a2a4a;
+            }
+        """)
+        header.setFixedHeight(80)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(30, 0, 30, 0)
+
+        # Заголовок
+        lbl_title = QLabel("Коллекция")
+        lbl_title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        lbl_title.setStyleSheet("color: white; background: transparent; border: none;")
+        h_layout.addWidget(lbl_title)
+
+        h_layout.addStretch()
+
+        # Поиск
+        search_inp = QLineEdit()
+        search_inp.setPlaceholderText("Поиск игр...")
+        search_inp.setFixedWidth(250)
+        search_inp.setStyleSheet("""
+            QLineEdit {
+                background-color: #1a1a3a;
+                color: white;
+                border: 1px solid #2a2a4a;
+                border-radius: 12px;
+                padding: 8px 15px;
+                font-size: 13px;
+            }
+            QLineEdit:focus { border: 1px solid #6366f1; }
+        """)
+        h_layout.addWidget(search_inp)
+
+        layout.addWidget(header)
+
+        # === 2. SCROLL AREA С ИГРАМИ ===
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("background: transparent; border: none;")
+
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background-color: #0d0d1a;")  # Фон контента
+
+        self.grid_layout = QGridLayout(scroll_content)
         self.grid_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.scroll.setWidget(self.grid_cont)
-        self.left_layout.addWidget(self.scroll)
+        self.grid_layout.setContentsMargins(30, 30, 30, 80)  # pb-20 (отступ снизу)
+        self.grid_layout.setSpacing(25)
 
+        scroll.setWidget(scroll_content)
+        layout.addWidget(scroll)
+
+        # Загрузка карточек
         self.load_games()
 
-        # Нижняя часть левой панели (Активные игры + Выход)
-        self.left_layout.addStretch()
+        # === 3. НИЖНИЙ STATUS BAR (Прижат к низу) ===
+        self.status_bar = QFrame()
+        self.status_bar.setFixedHeight(80)
+        self.status_bar.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #1a1a3a, stop:1 #12122a);
+                border-top: 1px solid #2a2a4a;
+            }
+        """)
+        sb_layout = QHBoxLayout(self.status_bar)
+        sb_layout.setContentsMargins(30, 0, 30, 0)
 
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("color: #EAEAEA;")
-        self.left_layout.addWidget(line)
+        # Левая часть: Индикатор статуса
+        # Используем StackedWidget, чтобы менять "Idle" и "Running"
+        self.status_stack = QStackedWidget()
+        self.status_stack.setStyleSheet("background: transparent; border: none;")
+        self.status_stack.setFixedSize(300, 60)
 
-        self.active_games_container = QWidget()
-        self.active_games_layout = QVBoxLayout(self.active_games_container)
-        self.active_games_layout.setContentsMargins(0, 0, 0, 0)
-        self.active_scroll = QScrollArea()
-        self.active_scroll.setFixedHeight(100)
-        self.active_scroll.setWidgetResizable(True)
-        self.active_scroll.setStyleSheet("background: transparent; border: none;")
-        self.active_scroll.setWidget(self.active_games_container)
-        self.left_layout.addWidget(self.active_scroll)
+        # Состояние IDLE (Ничего не запущено)
+        page_idle = QWidget()
+        pi_layout = QHBoxLayout(page_idle)
+        pi_layout.setContentsMargins(0, 0, 0, 0)
+        dot_idle = QLabel()
+        dot_idle.setFixedSize(12, 12)
+        dot_idle.setStyleSheet("background-color: #4b5563; border-radius: 6px;")  # gray-600
+        lbl_idle = QLabel("Нет запущенных игр")
+        lbl_idle.setStyleSheet("color: #6b7280; font-weight: 500; font-size: 14px; border: none;")
+        pi_layout.addWidget(dot_idle)
+        pi_layout.addWidget(lbl_idle)
+        pi_layout.addStretch()
+        self.status_stack.addWidget(page_idle)
 
-        self.main_h_layout.addWidget(self.left_panel, stretch=3)
+        # Состояние RUNNING (Игра идет)
+        page_run = QWidget()
+        pr_layout = QHBoxLayout(page_run)
+        pr_layout.setContentsMargins(0, 0, 0, 0)
+        dot_run = QLabel()
+        dot_run.setFixedSize(12, 12)
+        dot_run.setStyleSheet(
+            "background-color: #34d399; border-radius: 6px; border: 2px solid rgba(52, 211, 153, 0.5);")  # emerald
 
-        # === ПРАВАЯ ЧАСТЬ (ОНЛАЙН) ===
-        self.right_panel = QFrame()
-        self.right_panel.setObjectName("RightPanel")
-        self.right_panel.setStyleSheet("background-color: #2A2A3C; border: 10px solid #1E1E2E; border-radius: 25px;")
-        self.right_layout = QVBoxLayout(self.right_panel)
-        self.right_layout.setContentsMargins(15, 20, 15, 20)
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(0)
+        lbl_status = QLabel("ИГРА ЗАПУЩЕНА")
+        lbl_status.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; border: none;")
+        self.lbl_running_name = QLabel("Название игры")
+        self.lbl_running_name.setStyleSheet("color: white; font-size: 16px; font-weight: bold; border: none;")
+        text_layout.addWidget(lbl_status)
+        text_layout.addWidget(self.lbl_running_name)
 
-        lbl_online = QLabel("ОНЛАЙН ЛОББИ")
-        lbl_online.setObjectName("OnlineHeader")
-        lbl_online.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-        lbl_online.setStyleSheet("color: #EAEAEA; border: none; background: transparent;")
-        lbl_online.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.right_layout.addWidget(lbl_online)
+        pr_layout.addWidget(dot_run)
+        pr_layout.addLayout(text_layout)
+        pr_layout.addStretch()
+        self.status_stack.addWidget(page_run)
 
-        # Поле имени
-        self.name_inp = QLineEdit("Player")
-        self.name_inp.setPlaceholderText("Ваше имя")
-        self.name_inp.setStyleSheet(
-            "QLineEdit {padding: 5px; background: rgba(82, 97, 107, 20); color: #EAEAEA; border: none; border-radius: 7px;}"
-            "QLineEdit:disabled {background-color: rgba(82, 97, 107, 50); color: #A0A0A0; border: none;}")
-        self.name_inp.editingFinished.connect(self.update_name)
-        self.right_layout.addWidget(self.name_inp)
+        sb_layout.addWidget(self.status_stack)
+        sb_layout.addStretch()
 
-        # Стек экранов
-        self.stack = QStackedWidget()
-        self.right_layout.addWidget(self.stack)
-        self.stack.setStyleSheet("background: transparent; border: none;")
+        # Правая часть: Кнопка закрыть
+        self.btn_stop_game = QPushButton("Закрыть игру")
+        self.btn_stop_game.setFixedSize(140, 40)
+        self.btn_stop_game.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_stop_game.clicked.connect(self.close_active_game)  # Создадим этот метод
+        self.btn_stop_game.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(239, 68, 68, 0.1); /* red-500/10 */
+                color: #fca5a5; /* red-300 */
+                border: 1px solid rgba(239, 68, 68, 0.3);
+                border-radius: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(239, 68, 68, 0.2);
+                color: #fecaca; /* red-200 */
+            }
+        """)
+        self.btn_stop_game.hide()  # Скрыта по умолчанию
+        sb_layout.addWidget(self.btn_stop_game)
 
-        # ЭКРАН 0: СПИСОК КОМНАТ
+        layout.addWidget(self.status_bar)
+
+    def create_online_panel(self):
+        self.online_panel_widget = QFrame()
+        self.online_panel_widget.setFixedWidth(320)
+        self.online_panel_widget.setObjectName("NetworkPanel")
+
+        # Стили (Tailwind-like)
+        self.online_panel_widget.setStyleSheet("""
+                    QFrame#NetworkPanel {
+                        background-color: #12122a; /* bg-[#12122a] */
+                        border-left: 1px solid #2a2a4a;
+                    }
+                """)
+
+        main_layout = QVBoxLayout(self.online_panel_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # === HEADER ПАНЕЛИ ===
+        header = QFrame()
+        header.setStyleSheet("""
+                    QFrame {
+                        background-color: #12122a;
+                        border-bottom: 1px solid #2a2a4a;
+                    }
+                """)
+        header.setFixedHeight(70)  # p-6 (24px) ~ 70-80px
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(24, 0, 24, 0)
+
+        # Иконка (текстом 🌍) и Заголовок
+        title_box = QHBoxLayout()
+        title_box.setSpacing(10)
+
+        icon_lbl = QLabel("🌍")  # Заглушка SVG
+        icon_lbl.setStyleSheet("font-size: 18px; color: #818cf8;")  # indigo-400
+
+        title_lbl = QLabel("Мультиплеер")
+        title_lbl.setFont(QFont("Arial", 12, QFont.Weight.Bold))  # text-lg font-bold
+        title_lbl.setStyleSheet("color: white; border: none;")
+
+        title_box.addWidget(icon_lbl)
+        title_box.addWidget(title_lbl)
+        h_layout.addLayout(title_box)
+
+        h_layout.addStretch()
+
+        # Индикатор (Красная точка)
+        self.conn_indicator = QLabel()
+        self.conn_indicator.setFixedSize(10, 10)
+        # Стиль для "Не подключено" (red-500 + shadow)
+        self.style_disconnected = """
+                    background-color: #ef4444; 
+                    border-radius: 5px;
+                    border: 1px solid #b91c1c;
+                """
+        # Стиль для "Подключено" (green-500 + shadow)
+        self.style_connected = """
+                    background-color: #22c55e;
+                    border-radius: 5px;
+                    border: 1px solid #15803d;
+                """
+        self.conn_indicator.setStyleSheet(self.style_disconnected)
+        self.conn_indicator.setToolTip("Не подключено")
+        h_layout.addWidget(self.conn_indicator)
+
+        main_layout.addWidget(header)
+
+        # === КОНТЕНТ (Скролл + Стек) ===
+        content_container = QWidget()
+        content_container.setStyleSheet("background: transparent;")  # Прозрачный, чтобы видеть фон панели
+
+        # Наш старый StackedWidget теперь живет тут
+        self.net_stack = QStackedWidget(content_container)
+
+        # Оборачиваем в Layout с отступами (p-6)
+        c_layout = QVBoxLayout(content_container)
+        c_layout.setContentsMargins(24, 24, 24, 24)  # p-6
+        c_layout.addWidget(self.net_stack)
+
+        main_layout.addWidget(content_container)
+
+        # Инициализируем страницы стека (Login, List, Lobby)
+        self.init_network_pages()
+
+    def init_network_pages(self):
+        # --- PAGE 0: LOGIN ---
+        self.page_login = QWidget()
+        l_layout = QVBoxLayout(self.page_login)
+        l_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)  # justify-center
+        l_layout.setSpacing(15)
+
+        # Текст "Представьтесь"
+        lbl_hint = QLabel("Представьтесь:")
+        lbl_hint.setStyleSheet("color: #9ca3af; font-size: 13px;")  # text-gray-400 text-sm
+        lbl_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        l_layout.addWidget(lbl_hint)
+
+        # Поле ввода
+        self.inp_name = QLineEdit()
+        self.inp_name.setPlaceholderText("Никнейм...")
+        self.inp_name.setText(self.user_name)
+        # Стили (bg-[#1a1a3a], rounded-xl)
+        self.inp_name.setStyleSheet("""
+            QLineEdit {
+                background-color: #1a1a3a;
+                border: 1px solid #2a2a4a;
+                border-radius: 12px;
+                padding: 12px;
+                color: white;
+                font-size: 14px;
+            }
+            QLineEdit:focus { border: 1px solid #6366f1; } /* focus:border-indigo-500 */
+        """)
+        l_layout.addWidget(self.inp_name)
+
+        # Кнопка "Войти в сеть"
+        btn_login = QPushButton("Войти в сеть")
+        btn_login.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Стили (gradient, rounded-xl, glow)
+        btn_login.setStyleSheet("""
+            QPushButton {
+                background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #9333ea);
+                color: white;
+                font-weight: bold;
+                border-radius: 12px;
+                padding: 12px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #4f46e5; } /* упрощенный ховер */
+        """)
+        btn_login.clicked.connect(self.do_login_step)
+        l_layout.addWidget(btn_login)
+
+        self.net_stack.addWidget(self.page_login)
+
+        # --- PAGE 1: SERVER LIST (LOBBY LIST) ---
         self.page_list = QWidget()
         pl_layout = QVBoxLayout(self.page_list)
         pl_layout.setContentsMargins(0, 0, 0, 0)
+        pl_layout.setSpacing(10)
 
+        # Верхняя панель (Заголовок + Обновить)
+        top_bar = QHBoxLayout()
+        lbl_srv = QLabel("СЕРВЕРЫ")
+        lbl_srv.setStyleSheet(
+            "color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")  # tracking-widest
 
+        btn_refresh = QPushButton("Обновить")
+        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh.setStyleSheet("color: #818cf8; border: none; font-size: 11px;")
+        btn_refresh.clicked.connect(lambda: self.network.send_json(
+            {"type": "login", "name": self.user_name}))  # Повторный логин обновляет список
+
+        top_bar.addWidget(lbl_srv)
+        top_bar.addStretch()
+        top_bar.addWidget(btn_refresh)
+        pl_layout.addLayout(top_bar)
+
+        # Список (QListWidget с кастомными виджетами)
         self.lobby_list_widget = QListWidget()
-        self.lobby_list_widget.setStyleSheet("QListWidget {background: transparent; color: #EAEAEA; border: none;}"
-                                             "QListWidget::item { background: rgba(82, 97, 107, 60); padding: 5px; margin: 5px 0; border-radius: 7px; color: #EAEAEA;}"
-                                             "QListWidget::item:hover { background: rgba(82, 97, 107, 90); }"
-                                             "QListWidget::item:selected { background: rgba(82, 97, 107, 70); }"
-                                             "QListWidget::item:selected:active { background: rgba(82, 97, 107, 70); }")
-        self.lobby_list_widget.itemDoubleClicked.connect(self.on_lobby_double_click)
+        self.lobby_list_widget.setStyleSheet("""
+                    QListWidget { background: transparent; border: none; outline: none; }
+                    QListWidget::item { background: transparent; padding: 0px; margin-bottom: 8px; }
+                """)
         pl_layout.addWidget(self.lobby_list_widget)
 
-        btn_create = QPushButton("Создать комнату")
-        btn_create.setStyleSheet("background: #2ECC71; color: #EAEAEA; padding: 8px; border-radius: 7px;")
+        # Нижние кнопки
+        bottom_box = QFrame()
+        bottom_box.setStyleSheet("border-top: 1px solid #2a2a4a; padding-top: 16px;")
+        bb_layout = QVBoxLayout(bottom_box)
+        bb_layout.setContentsMargins(0, 16, 0, 0)
+
+        btn_create = QPushButton("+ Создать комнату")
+        btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_create.clicked.connect(self.open_create_dialog)
-        pl_layout.addWidget(btn_create)
+        btn_create.setStyleSheet("""
+                    QPushButton {
+                        background: transparent;
+                        border: 1px solid rgba(99, 102, 241, 0.3); /* indigo-500/30 */
+                        color: #a5b4fc; /* indigo-300 */
+                        border-radius: 12px;
+                        padding: 10px;
+                        font-weight: bold;
+                        font-size: 13px;
+                    }
+                    QPushButton:hover { background-color: rgba(99, 102, 241, 0.1); }
+                """)
 
-        self.stack.addWidget(self.page_list)
+        btn_logout = QPushButton("Выйти")
+        btn_logout.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_logout.clicked.connect(self.do_logout)
+        btn_logout.setStyleSheet("color: #6b7280; border: none; font-size: 11px; margin-top: 5px;")
 
-        # ЭКРАН 1: ВНУТРИ ЛОББИ
-        self.page_room = QWidget()
-        pr_layout = QVBoxLayout(self.page_room)
+        bb_layout.addWidget(btn_create)
+        bb_layout.addWidget(btn_logout, alignment=Qt.AlignmentFlag.AlignHCenter)
+        pl_layout.addWidget(bottom_box)
 
-        self.room_title = QLabel("Комната")
-        self.room_title.setStyleSheet(
-            "color: gold; font-size: 16px; font-weight: bold; background: transparent; border: none;")
-        self.room_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pr_layout.addWidget(self.room_title)
+        self.net_stack.addWidget(self.page_list)
 
-        self.room_players = QListWidget()
-        self.room_players.setStyleSheet("QListWidget {background: transparent; color: #EAEAEA; border: none;}"
-                                        "QListWidget::item { background: rgba(82, 97, 107, 60); padding: 5px; margin: 5px 0; border-radius: 7px; color: #EAEAEA;}"
-                                        "QListWidget::item:hover { background: rgba(82, 97, 107, 90); }"
-                                        "QListWidget::item:selected { background: rgba(82, 97, 107, 70); }"
-                                        "QListWidget::item:selected:active { background: rgba(82, 97, 107, 70); }")
-        pr_layout.addWidget(self.room_players)
+        # --- PAGE 2: INSIDE LOBBY ---
+        self.page_lobby = QWidget()
+        pr_layout = QVBoxLayout(self.page_lobby)
+        pr_layout.setContentsMargins(0, 0, 0, 0)
+        pr_layout.setSpacing(15)
 
-        lbl_log = QLabel("Лог ходов:")
-        lbl_log.setStyleSheet("color: #aaa; font-size: 12px; margin-top: 5px;")
-        pr_layout.addWidget(lbl_log)
+        # 1. Заголовок комнаты
+        room_header = QFrame()
+        room_header.setStyleSheet("border-bottom: 1px solid #2a2a4a; padding-bottom: 10px;")
+        rh_layout = QHBoxLayout(room_header)
+        rh_layout.setContentsMargins(0, 0, 0, 0)
 
+        self.lbl_room_name = QLabel("Room Name")
+        self.lbl_room_name.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.lbl_room_name.setStyleSheet("color: white; border: none;")
+
+        btn_leave_icon = QPushButton("✕")
+        btn_leave_icon.setFixedSize(24, 24)
+        btn_leave_icon.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_leave_icon.clicked.connect(self.leave_lobby)
+        btn_leave_icon.setStyleSheet("color: #6b7280; border: none; font-weight: bold;")
+
+        rh_layout.addWidget(self.lbl_room_name)
+        rh_layout.addStretch()
+        rh_layout.addWidget(btn_leave_icon)
+        pr_layout.addWidget(room_header)
+
+        # 2. Список игроков
+        lbl_players = QLabel("ИГРОКИ")
+        lbl_players.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        pr_layout.addWidget(lbl_players)
+
+        self.room_players_list = QListWidget()
+        self.room_players_list.setStyleSheet("""
+                    QListWidget { background: transparent; border: none; }
+                    QListWidget::item { border-bottom: 1px solid #2a2a4a; padding: 8px 0; }
+                """)
+        self.room_players_list.setFixedHeight(100)  # Ограничим высоту
+        pr_layout.addWidget(self.room_players_list)
+
+        # 3. Выбранная игра
+        self.game_info_box = QFrame()
+        self.game_info_box.setStyleSheet("""
+                    background-color: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px;
+                """)
+        gi_layout = QHBoxLayout(self.game_info_box)
+
+        self.lbl_selected_game_icon = QLabel("🎮")  # Заглушка
+        self.lbl_selected_game_name = QLabel("Выберите игру")
+        self.lbl_selected_game_name.setStyleSheet("color: #9ca3af; font-weight: 500; border: none;")
+
+        gi_layout.addWidget(self.lbl_selected_game_icon)
+        gi_layout.addWidget(self.lbl_selected_game_name)
+        gi_layout.addStretch()
+        pr_layout.addWidget(self.game_info_box)
+
+        # 4. Чат (Лог + Ввод)
         self.room_log = QListWidget()
-        self.room_log.setStyleSheet("background: rgba(0,0,0,50); border-radius: 5px; color: #ccc; font-size: 11px;")
-        self.room_log.model().rowsInserted.connect(self.room_log.scrollToBottom)
+        self.room_log.setStyleSheet("background: rgba(0,0,0,0.3); border-radius: 8px; color: #9ca3af; font-size: 11px;")
         pr_layout.addWidget(self.room_log)
 
-        self.lbl_selected_game = QLabel("Выберите игру слева")
-        self.lbl_selected_game.setStyleSheet("color: #EAEAEA; background: transparent; border: none;")
-        self.lbl_selected_game.setWordWrap(True)
-        self.lbl_selected_game.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        pr_layout.addWidget(self.lbl_selected_game)
+        chat_inp_box = QHBoxLayout()
+        self.chat_inp = QLineEdit()
+        self.chat_inp.setPlaceholderText("Сообщение...")
+        self.chat_inp.setStyleSheet(
+            "background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 8px; color: white; padding: 6px;")
+        self.chat_inp.returnPressed.connect(self.send_chat_msg)  # Отправка по Enter
 
-        # Управление
-        ctrl_layout = QHBoxLayout()
-        self.check_ready = QCheckBox("Я ГОТОВ")
-        self.check_ready.setStyleSheet("color: #EAEAEA; font-weight: bold;")
-        self.check_ready.toggled.connect(self.send_ready_status)
-        ctrl_layout.addWidget(self.check_ready)
+        btn_send = QPushButton("➤")
+        btn_send.setFixedSize(30, 30)
+        btn_send.clicked.connect(self.send_chat_msg)
+        btn_send.setStyleSheet("color: #818cf8; border: none; font-size: 16px;")
 
-        btn_leave = QPushButton("Выйти")
-        btn_leave.setStyleSheet("background: #E74C3C; color: #EAEAEA; padding: 5px; border-radius: 5px;")
-        btn_leave.clicked.connect(self.leave_lobby)
-        ctrl_layout.addWidget(btn_leave)
+        chat_inp_box.addWidget(self.chat_inp)
+        chat_inp_box.addWidget(btn_send)
+        pr_layout.addLayout(chat_inp_box)
 
-        pr_layout.addLayout(ctrl_layout)
-        self.stack.addWidget(self.page_room)
+        # 5. Кнопка Готов
+        self.btn_ready = QPushButton("Готов")
+        self.btn_ready.setCheckable(True)
+        self.btn_ready.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ready.clicked.connect(self.toggle_ready)
+        self.btn_ready.setFixedHeight(45)
+        # Стили для состояний (Normal / Checked)
+        self.btn_ready.setStyleSheet("""
+                    QPushButton {
+                        background-color: #1a1a3a;
+                        color: #9ca3af;
+                        border: 1px solid #2a2a4a;
+                        border-radius: 12px;
+                        font-weight: bold;
+                    }
+                    QPushButton:checked {
+                        background-color: #22c55e; /* green-500 */
+                        color: white;
+                        border: 1px solid #16a34a;
+                    }
+                    QPushButton:hover:!checked { border-color: #6b7280; }
+                """)
+        pr_layout.addWidget(self.btn_ready)
 
-        self.main_h_layout.addWidget(self.right_panel, stretch=1)
+        self.net_stack.addWidget(self.page_lobby)
 
-        self.main_h_layout.addWidget(self.settings_panel)
+    def do_login_step(self):
+        name = self.inp_name.text().strip()
+        if name:
+            self.user_name = name
+
+            # Если сокет уже подключен (авто-коннект), шлем логин
+            if self.network.isRunning():
+                self.network.send_json({"type": "login", "name": name})
+                self.net_stack.setCurrentIndex(1)  # Переходим к списку (позже создадим)
+
+                # Меняем индикатор на Зеленый (теперь мы точно в сети как игрок)
+                self.conn_indicator.setStyleSheet(self.style_connected)
+            else:
+                # Если сокета нет - пробуем подключиться (и залогинимся в on_connected)
+                self.notifications.show("Ошибка", "Нет соединения с сервером", "error")
+        else:
+            # Красная рамка (как в JS)
+            self.inp_name.setStyleSheet(
+                self.inp_name.styleSheet().replace("border: 1px solid #2a2a4a;", "border: 1px solid #ef4444;"))
+
+    def update_lobby_list(self, lobbies):
+        self.lobby_list_widget.clear()
+
+        for l in lobbies:
+            # Создаем кастомный виджет для элемента
+            item_widget = QFrame()
+            item_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+            item_widget.setFixedHeight(60)
+            item_widget.setStyleSheet("""
+                QFrame {
+                    background-color: #1a1a3a;
+                    border: 1px solid #2a2a4a;
+                    border-radius: 12px;
+                }
+                QFrame:hover { background-color: #252540; }
+            """)
+
+            # Layout внутри плашки
+            h_layout = QHBoxLayout(item_widget)
+            h_layout.setContentsMargins(12, 0, 12, 0)
+
+            # Левая часть (Имя + Ping)
+            v_layout = QVBoxLayout()
+            v_layout.setSpacing(2)
+
+            name_lbl = QLabel(l["name"])
+            name_lbl.setStyleSheet(
+                "color: #e5e7eb; font-weight: bold; font-size: 13px; border: none; background: transparent;")
+
+            # Ping (заглушка)
+            ping_lbl = QLabel("Ping: 5 ms")
+            ping_lbl.setStyleSheet("color: #6b7280; font-size: 10px; border: none; background: transparent;")
+
+            v_layout.addWidget(name_lbl)
+            v_layout.addWidget(ping_lbl)
+            h_layout.addLayout(v_layout)
+
+            h_layout.addStretch()
+
+            # Правая часть (Игроки)
+            count_lbl = QLabel(f"{l['players']}/{l['max']}")
+            count_lbl.setStyleSheet("""
+                background-color: #12122a;
+                color: #a5b4fc;
+                border: 1px solid rgba(99, 102, 241, 0.2);
+                border-radius: 6px;
+                padding: 4px 8px;
+                font-family: monospace;
+                font-size: 11px;
+            """)
+            h_layout.addWidget(count_lbl)
+
+            # Добавляем в список
+            list_item = QListWidgetItem(self.lobby_list_widget)
+            list_item.setSizeHint(item_widget.sizeHint())
+
+            # Чтобы клик по виджету обрабатывался, нужно перехватить событие
+            # Или использовать QListWidget.itemClicked, но виджет перекроет клик.
+            # Сделаем "прозрачную кнопку" поверх или просто используем mousePressEvent в QFrame?
+            # Проще: item_widget не перехватывает клики QListWidget, если у него нет кнопок.
+            # Но у нас сложный виджет. Сделаем так:
+
+            # Добавляем данные
+            list_item.setData(Qt.ItemDataRole.UserRole, l["id"])
+            list_item.setData(Qt.ItemDataRole.UserRole + 1, l["private"])
+
+            self.lobby_list_widget.setItemWidget(list_item, item_widget)
+
+    # Метод выхода (Disconnect)
+    def do_logout(self):
+        self.net_stack.setCurrentIndex(0)  # На страницу логина
+        self.conn_indicator.setStyleSheet(self.style_disconnected)  # Красный
+
+    def update_room_ui(self, data):
+        self.net_stack.setCurrentIndex(2)  # Переход на страницу лобби
+
+        self.lbl_room_name.setText(data['name'])
+
+        # Обновляем список игроков
+        self.room_players_list.clear()
+        for p in data["players"]:
+            status_color = "#22c55e" if p["ready"] else "#ef4444"  # Зеленый/Красный
+            host_icon = "👑 " if p["is_host"] else ""
+
+            # Верстка элемента списка
+            item_widget = QWidget()
+            il = QHBoxLayout(item_widget)
+            il.setContentsMargins(5, 0, 5, 0)
+
+            name = QLabel(f"{host_icon}{p['name']}")
+            name.setStyleSheet("color: #e5e7eb; font-weight: 500; border: none;")
+
+            dot = QLabel()
+            dot.setFixedSize(8, 8)
+            dot.setStyleSheet(f"background-color: {status_color}; border-radius: 4px;")
+
+            il.addWidget(name)
+            il.addStretch()
+            il.addWidget(dot)
+
+            item = QListWidgetItem(self.room_players_list)
+            item.setSizeHint(item_widget.sizeHint())
+            self.room_players_list.setItemWidget(item, item_widget)
+
+        # Игра
+        sel_game = data["selected_game"]
+        if sel_game:
+            # Находим название
+            title = next((g["title"] for g in GAMES_CONFIG if g["id"] == sel_game), "Неизвестно")
+            self.lbl_selected_game_name.setText(title)
+            self.lbl_selected_game_name.setStyleSheet("color: #e5e7eb; font-weight: bold; border: none;")
+            self.game_info_box.setStyleSheet(
+                "background-color: #312e81; border: 1px solid #4f46e5; border-radius: 12px;")  # Подсветка индиго
+        else:
+            self.lbl_selected_game_name.setText("Выберите игру слева")
+            self.lbl_selected_game_name.setStyleSheet("color: #9ca3af; font-weight: 500; border: none;")
+            self.game_info_box.setStyleSheet(
+                "background-color: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px;")
+
+    def toggle_ready(self):
+        status = self.btn_ready.isChecked()
+        self.btn_ready.setText("Я Готов!" if status else "Не готов")
+        self.network.send_json({"type": "toggle_ready", "status": status})
+
+    def send_chat_msg(self):
+        msg = self.chat_inp.text().strip()
+        if msg:
+            self.network.send_json({"type": "chat_msg", "text": msg})
+            self.chat_inp.clear()
+            # Добавляем в лог сразу (опционально, или ждать от сервера)
+            self.add_to_log(f"Вы: {msg}")
+
+    def set_game_status(self, is_running, game_title=""):
+        if is_running:
+            self.status_stack.setCurrentIndex(1)  # Показываем Running
+            self.lbl_running_name.setText(game_title)
+            self.btn_stop_game.show()
+        else:
+            self.status_stack.setCurrentIndex(0)  # Показываем Idle
+            self.btn_stop_game.hide()
 
     def load_games(self):
-        r, c = 0, 0
         for game in GAMES_CONFIG:
             card = GameCard(game, self.on_game_click)
-            self.grid_layout.addWidget(card, r, c)
-            self.game_cards[game["id"]] = card
-            c += 1
-            if c > 2: c = 0; r += 1
+            self.grid_layout.addWidget(card)
 
     # --- СЕТЕВЫЕ СОБЫТИЯ ---
     def fetch_server_list_and_connect(self):
@@ -488,11 +1075,15 @@ class Launcher(OverlayWindow):
     def on_connected(self):
         self.network.send_json({"type": "login", "name": self.name_inp.text()})
         self.notifications.show("Сервер", "Подключено успешно!", "success")
+        self.conn_indicator.setStyleSheet(self.style_connected)
+        self.conn_indicator.setToolTip("Подключено")
 
     def on_disconnected(self):
         self.notifications.show("Сервер", "Соединение разорвано", "error")
         self.stack.setCurrentIndex(0)
         self.lobby_list_widget.clear()
+        self.conn_indicator.setStyleSheet(self.style_disconnected)
+        self.conn_indicator.setToolTip("Не подключено")
 
     def on_net_error(self, err):
         pass  # Можно логировать
@@ -729,11 +1320,17 @@ class Launcher(OverlayWindow):
 
     # --- СПИСОК ЗАПУЩЕННЫХ ---
     def add_active_game_widget(self, game_window, title):
-        if not hasattr(self, 'running_games'): self.running_games = {}
-        item = ActiveGameItem(title, lambda: game_window.close())
-        self.active_games_layout.addWidget(item)
-        self.running_games[id(game_window)] = item
-        game_window.destroyed.connect(lambda: self.remove_active_game_widget(id(game_window)))
+        if self.active_game:
+            self.active_game.close()
+
+        self.active_game = game_window
+        self.set_game_status(True, title)
+
+        game_window.destroyed.connect(lambda: self.set_game_status(False))
+
+    def close_active_game(self):
+        if self.active_game:
+            self.active_game.close()
 
     def remove_active_game_widget(self, window_id):
         if hasattr(self, 'running_games') and window_id in self.running_games:
@@ -847,7 +1444,39 @@ class Launcher(OverlayWindow):
 
     def resizeEvent(self, event):
         self.notifications.reposition_toasts()
+        if not hasattr(self, 'resize_timer'):
+            self.resize_timer = QTimer()
+            self.resize_timer.setSingleShot(True)
+            self.resize_timer.timeout.connect(self.reflow_games_grid)
+
+        self.resize_timer.start(35)
         super().resizeEvent(event)
+
+    def reflow_games_grid(self):
+        available_width = self.width() - 70 - 320 - 60
+        if available_width < 250: available_width = 250
+
+        card_width = 220
+        spacing = 25
+
+        cols = available_width // (card_width + spacing)
+        if cols < 1: cols = 1
+
+        widgets = []
+        for i in range(self.grid_layout.count()):
+            widgets.append(self.grid_layout.itemAt(i).widget())
+
+        for w in widgets:
+            if w: w.setParent(None)
+
+        row, col = 0, 0
+        for w in widgets:
+            if w:
+                self.grid_layout.addWidget(w, row, col)
+                col += 1
+                if col >= cols:
+                    col = 0
+                    row += 1
 
     def update_game_opacity(self, opacity):
         if self.active_game:

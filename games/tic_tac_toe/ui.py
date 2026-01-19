@@ -149,6 +149,11 @@ class TicTacToeGame(OverlayWindow):
         self._update_ui()
 
     def closeEvent(self, event):
+        if self.network:
+            try:
+                self.network.json_received.disconnect()
+            except:
+                pass
         super().closeEvent(event)
 
     def mousePressEvent(self, event):

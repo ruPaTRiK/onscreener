@@ -382,3 +382,11 @@ class BattleshipGame(OverlayWindow):
         self.ready_btn.hide()
 
         self.update()
+
+    def closeEvent(self, event):
+        if self.network:
+            try:
+                self.network.json_received.disconnect()
+            except:
+                pass
+        super().closeEvent(event)
