@@ -688,106 +688,104 @@ class Launcher(OverlayWindow):
 
         self.net_stack.addWidget(self.page_list)
 
-        # --- PAGE 2: INSIDE LOBBY ---
+        # --- PAGE 2: INSIDE LOBBY (Дизайн по JS) ---
         self.page_lobby = QWidget()
         pr_layout = QVBoxLayout(self.page_lobby)
         pr_layout.setContentsMargins(0, 0, 0, 0)
-        pr_layout.setSpacing(15)
+        pr_layout.setSpacing(0)  # Отступы контролируем внутри элементов
 
-        # 1. Заголовок комнаты
-        room_header = QFrame()
-        room_header.setStyleSheet("border-bottom: 1px solid #2a2a4a; padding-bottom: 10px;")
-        rh_layout = QHBoxLayout(room_header)
-        rh_layout.setContentsMargins(0, 0, 0, 0)
+        # 1. HEADER (Комната и Игра)
+        header_container = QFrame()
+        header_container.setStyleSheet("border-bottom: 1px solid #2a2a4a; padding-bottom: 16px; margin-bottom: 10px;")
+        hc_layout = QVBoxLayout(header_container)
+        hc_layout.setContentsMargins(0, 0, 0, 0)
+        hc_layout.setSpacing(4)
+
+        lbl_subtitle = QLabel("КОМНАТА")
+        lbl_subtitle.setStyleSheet(
+            "color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")  # tracking-widest
+        hc_layout.addWidget(lbl_subtitle)
 
         self.lbl_room_name = QLabel("Room Name")
-        self.lbl_room_name.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+        self.lbl_room_name.setFont(QFont("Arial", 14, QFont.Weight.Bold))  # text-lg
         self.lbl_room_name.setStyleSheet("color: white; border: none;")
+        hc_layout.addWidget(self.lbl_room_name)
 
-        btn_leave_icon = QPushButton("✕")
-        btn_leave_icon.setFixedSize(24, 24)
-        btn_leave_icon.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_leave_icon.clicked.connect(self.leave_lobby)
-        btn_leave_icon.setStyleSheet("color: #6b7280; border: none; font-weight: bold;")
+        # Строка с игрой
+        game_row = QHBoxLayout()
+        lbl_game_title = QLabel("Игра:")
+        lbl_game_title.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        self.lbl_selected_game_name = QLabel("Не выбрана")
+        self.lbl_selected_game_name.setStyleSheet(
+            "color: #818cf8; font-size: 12px; font-weight: bold;")  # text-indigo-400
+        game_row.addWidget(lbl_game_title)
+        game_row.addWidget(self.lbl_selected_game_name)
+        game_row.addStretch()
+        hc_layout.addLayout(game_row)
 
-        rh_layout.addWidget(self.lbl_room_name)
-        rh_layout.addStretch()
-        rh_layout.addWidget(btn_leave_icon)
-        pr_layout.addWidget(room_header)
+        pr_layout.addWidget(header_container)
 
-        # 2. Список игроков
-        lbl_players = QLabel("ИГРОКИ")
-        lbl_players.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
-        pr_layout.addWidget(lbl_players)
+        # 2. СПИСОК ИГРОКОВ
+        # Заголовок списка
+        player_header = QHBoxLayout()
+        lbl_p_title = QLabel("ИГРОКИ")
+        lbl_p_title.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        self.lbl_player_count = QLabel("0/8")
+        self.lbl_player_count.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold;")
+        player_header.addWidget(lbl_p_title)
+        player_header.addStretch()
+        player_header.addWidget(self.lbl_player_count)
+        pr_layout.addLayout(player_header)
 
+        # Сам список
         self.room_players_list = QListWidget()
-        self.room_players_list.setStyleSheet("""
-                    QListWidget { background: transparent; border: none; }
-                    QListWidget::item { border-bottom: 1px solid #2a2a4a; padding: 8px 0; }
-                """)
-        self.room_players_list.setFixedHeight(100)  # Ограничим высоту
+        self.room_players_list.setStyleSheet("background: transparent; border: none; outline: none;")
+        self.room_players_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         pr_layout.addWidget(self.room_players_list)
 
-        # 3. Выбранная игра
-        self.game_info_box = QFrame()
-        self.game_info_box.setStyleSheet("""
-                    background-color: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px;
-                """)
-        gi_layout = QHBoxLayout(self.game_info_box)
+        # 3. FOOTER (Кнопки)
+        footer_container = QWidget()
+        f_layout = QVBoxLayout(footer_container)
+        f_layout.setContentsMargins(0, 16, 0, 0)  # mt-auto pt-4
+        f_layout.setSpacing(10)
 
-        self.lbl_selected_game_icon = QLabel("🎮")  # Заглушка
-        self.lbl_selected_game_name = QLabel("Выберите игру")
-        self.lbl_selected_game_name.setStyleSheet("color: #9ca3af; font-weight: 500; border: none;")
-
-        gi_layout.addWidget(self.lbl_selected_game_icon)
-        gi_layout.addWidget(self.lbl_selected_game_name)
-        gi_layout.addStretch()
-        pr_layout.addWidget(self.game_info_box)
-
-        # 4. Чат (Лог + Ввод)
-        self.room_log = QListWidget()
-        self.room_log.setStyleSheet("background: rgba(0,0,0,0.3); border-radius: 8px; color: #9ca3af; font-size: 11px;")
-        pr_layout.addWidget(self.room_log)
-
-        chat_inp_box = QHBoxLayout()
-        self.chat_inp = QLineEdit()
-        self.chat_inp.setPlaceholderText("Сообщение...")
-        self.chat_inp.setStyleSheet(
-            "background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 8px; color: white; padding: 6px;")
-        self.chat_inp.returnPressed.connect(self.send_chat_msg)  # Отправка по Enter
-
-        btn_send = QPushButton("➤")
-        btn_send.setFixedSize(30, 30)
-        btn_send.clicked.connect(self.send_chat_msg)
-        btn_send.setStyleSheet("color: #818cf8; border: none; font-size: 16px;")
-
-        chat_inp_box.addWidget(self.chat_inp)
-        chat_inp_box.addWidget(btn_send)
-        pr_layout.addLayout(chat_inp_box)
-
-        # 5. Кнопка Готов
-        self.btn_ready = QPushButton("Готов")
-        self.btn_ready.setCheckable(True)
+        # Кнопка ГОТОВ
+        self.btn_ready = QPushButton("ГОТОВ")
         self.btn_ready.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_ready.setFixedHeight(45)  # py-3
         self.btn_ready.clicked.connect(self.toggle_ready)
-        self.btn_ready.setFixedHeight(45)
-        # Стили для состояний (Normal / Checked)
+        # Стиль по умолчанию (Не готов)
         self.btn_ready.setStyleSheet("""
                     QPushButton {
-                        background-color: #1a1a3a;
-                        color: #9ca3af;
-                        border: 1px solid #2a2a4a;
+                        background-color: #2a2a4a;
+                        color: #d1d5db; /* gray-300 */
                         border-radius: 12px;
                         font-weight: bold;
+                        border: none;
                     }
-                    QPushButton:checked {
-                        background-color: #22c55e; /* green-500 */
-                        color: white;
-                        border: 1px solid #16a34a;
-                    }
-                    QPushButton:hover:!checked { border-color: #6b7280; }
+                    QPushButton:hover { background-color: #35355a; }
                 """)
-        pr_layout.addWidget(self.btn_ready)
+        f_layout.addWidget(self.btn_ready)
+
+        # Кнопка ПОКИНУТЬ
+        btn_leave = QPushButton("Покинуть")
+        btn_leave.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_leave.setFixedHeight(35)  # py-2
+        btn_leave.clicked.connect(self.leave_lobby)
+        btn_leave.setStyleSheet("""
+                    QPushButton {
+                        background: transparent;
+                        border: 1px solid rgba(239, 68, 68, 0.3); /* red-500/30 */
+                        color: #f87171; /* red-400 */
+                        border-radius: 12px;
+                        font-weight: 600; /* font-semibold */
+                        font-size: 13px; /* text-sm */
+                    }
+                    QPushButton:hover { background-color: rgba(239, 68, 68, 0.1); }
+                """)
+        f_layout.addWidget(btn_leave)
+
+        pr_layout.addWidget(footer_container)
 
         self.net_stack.addWidget(self.page_lobby)
 
@@ -815,69 +813,80 @@ class Launcher(OverlayWindow):
         self.lobby_list_widget.clear()
 
         for l in lobbies:
-            # Создаем кастомный виджет для элемента
-            item_widget = QFrame()
-            item_widget.setCursor(Qt.CursorShape.PointingHandCursor)
-            item_widget.setFixedHeight(60)
-            item_widget.setStyleSheet("""
-                QFrame {
-                    background-color: #1a1a3a;
-                    border: 1px solid #2a2a4a;
-                    border-radius: 12px;
-                }
-                QFrame:hover { background-color: #252540; }
-            """)
-
-            # Layout внутри плашки
-            h_layout = QHBoxLayout(item_widget)
-            h_layout.setContentsMargins(12, 0, 12, 0)
-
-            # Левая часть (Имя + Ping)
-            v_layout = QVBoxLayout()
-            v_layout.setSpacing(2)
-
-            name_lbl = QLabel(l["name"])
-            name_lbl.setStyleSheet(
-                "color: #e5e7eb; font-weight: bold; font-size: 13px; border: none; background: transparent;")
-
-            # Ping (заглушка)
-            ping_lbl = QLabel("Ping: 5 ms")
-            ping_lbl.setStyleSheet("color: #6b7280; font-size: 10px; border: none; background: transparent;")
-
-            v_layout.addWidget(name_lbl)
-            v_layout.addWidget(ping_lbl)
-            h_layout.addLayout(v_layout)
-
-            h_layout.addStretch()
-
-            # Правая часть (Игроки)
-            count_lbl = QLabel(f"{l['players']}/{l['max']}")
-            count_lbl.setStyleSheet("""
-                background-color: #12122a;
-                color: #a5b4fc;
-                border: 1px solid rgba(99, 102, 241, 0.2);
-                border-radius: 6px;
-                padding: 4px 8px;
-                font-family: monospace;
-                font-size: 11px;
-            """)
-            h_layout.addWidget(count_lbl)
-
-            # Добавляем в список
+            # Создаем элемент списка
             list_item = QListWidgetItem(self.lobby_list_widget)
+
+            # --- ВИДЖЕТ ЭЛЕМЕНТА ---
+            # Мы наследуемся от QFrame, чтобы переопределить клик
+            class LobbyWidget(QFrame):
+                def __init__(self, parent_launcher, lobby_data):
+                    super().__init__()
+                    self.launcher = parent_launcher
+                    self.lobby_data = lobby_data
+                    self.setCursor(Qt.CursorShape.PointingHandCursor)
+                    self.setFixedHeight(60)
+                    self.setStyleSheet("""
+                                QFrame {
+                                    background-color: #1a1a3a;
+                                    border: 1px solid #2a2a4a;
+                                    border-radius: 12px;
+                                }
+                                QFrame:hover { background-color: #252540; border-color: #6366f1; }
+                            """)
+
+                    # Лейаут (тот же, что был)
+                    h_layout = QHBoxLayout(self)
+                    h_layout.setContentsMargins(12, 0, 12, 0)
+
+                    v_layout = QVBoxLayout()
+                    v_layout.setSpacing(2)
+                    name_lbl = QLabel(l["name"])
+                    name_lbl.setStyleSheet("color: #e5e7eb; font-weight: bold; border: none; background: transparent;")
+                    ping_lbl = QLabel("Ping: 5 ms")
+                    ping_lbl.setStyleSheet("color: #6b7280; font-size: 10px; border: none; background: transparent;")
+                    v_layout.addWidget(name_lbl)
+                    v_layout.addWidget(ping_lbl)
+                    h_layout.addLayout(v_layout)
+
+                    h_layout.addStretch()
+
+                    # Замок, если есть
+                    if l["private"]:
+                        lock = QLabel("🔒")
+                        lock.setStyleSheet("border: none; background: transparent; color: #fbbf24;")
+                        h_layout.addWidget(lock)
+
+                    count_lbl = QLabel(f"{l['players']}/{l['max']}")
+                    count_lbl.setStyleSheet("""
+                                background-color: #12122a; color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.2);
+                                border-radius: 6px; padding: 4px 8px; font-size: 11px;
+                            """)
+                    h_layout.addWidget(count_lbl)
+
+                # ПЕРЕХВАТ ДВОЙНОГО КЛИКА
+                def mouseDoubleClickEvent(self, event):
+                    if event.button() == Qt.MouseButton.LeftButton:
+                        # Вызываем метод Лаунчера напрямую
+                        self.launcher.join_lobby_by_data(self.lobby_data)
+
+            # Создаем и добавляем
+            item_widget = LobbyWidget(self, l)
             list_item.setSizeHint(item_widget.sizeHint())
-
-            # Чтобы клик по виджету обрабатывался, нужно перехватить событие
-            # Или использовать QListWidget.itemClicked, но виджет перекроет клик.
-            # Сделаем "прозрачную кнопку" поверх или просто используем mousePressEvent в QFrame?
-            # Проще: item_widget не перехватывает клики QListWidget, если у него нет кнопок.
-            # Но у нас сложный виджет. Сделаем так:
-
-            # Добавляем данные
-            list_item.setData(Qt.ItemDataRole.UserRole, l["id"])
-            list_item.setData(Qt.ItemDataRole.UserRole + 1, l["private"])
-
             self.lobby_list_widget.setItemWidget(list_item, item_widget)
+
+    def join_lobby_by_data(self, l_data):
+        lid = l_data["id"]
+        is_private = l_data["private"]
+        pwd = ""
+
+        if is_private:
+            dlg = PasswordDialog(self)
+            if dlg.exec():
+                pwd = dlg.get_password()
+            else:
+                return  # Отмена
+
+        self.network.send_json({"type": "join_lobby", "lobby_id": lid, "password": pwd})
 
     # Метод выхода (Disconnect)
     def do_logout(self):
@@ -885,63 +894,152 @@ class Launcher(OverlayWindow):
         self.conn_indicator.setStyleSheet(self.style_disconnected)  # Красный
 
     def update_room_ui(self, data):
-        self.net_stack.setCurrentIndex(2)  # Переход на страницу лобби
+        self.net_stack.setCurrentIndex(2)
+
+        self.current_lobby_id = data["lobby_id"]
+        self.is_host = data["am_i_host"]
 
         self.lbl_room_name.setText(data['name'])
 
+        # Обновляем игру
+        sel_game = data["selected_game"]
+        if sel_game:
+            title = next((g["title"] for g in GAMES_CONFIG if g["id"] == sel_game), "Неизвестно")
+            self.lbl_selected_game_name.setText(title)
+            # Подсвечиваем в списке слева
+            self.deselect_all_games()
+            if sel_game in self.game_cards:
+                self.game_cards[sel_game].set_selected(True)
+        else:
+            self.lbl_selected_game_name.setText("Не выбрана")
+            self.deselect_all_games()
+
         # Обновляем список игроков
         self.room_players_list.clear()
+
+        # Ищем себя в списке для обновления кнопки
+        my_ready_status = False
+
         for p in data["players"]:
-            status_color = "#22c55e" if p["ready"] else "#ef4444"  # Зеленый/Красный
-            host_icon = "👑 " if p["is_host"] else ""
+            is_me = (p["name"] == self.inp_name.text())
 
-            # Верстка элемента списка
-            item_widget = QWidget()
-            il = QHBoxLayout(item_widget)
-            il.setContentsMargins(5, 0, 5, 0)
+            # Обновляем свою кнопку готовности, если данные пришли с сервера
+            if is_me:
+                self.btn_ready.blockSignals(True)
+                self.btn_ready.setChecked(p["ready"])
+                self.btn_ready.setText("ВЫ ГОТОВЫ" if p["ready"] else "ГОТОВ")
+                self.btn_ready.blockSignals(False)
 
-            name = QLabel(f"{host_icon}{p['name']}")
-            name.setStyleSheet("color: #e5e7eb; font-weight: 500; border: none;")
+            # Виджет игрока
+            item_widget = QFrame()
+            item_widget.setFixedHeight(50)
+            item_widget.setStyleSheet("""
+                        QFrame {
+                            background-color: #1a1a3a;
+                            border: 1px solid #2a2a4a;
+                            border-radius: 8px;
+                        }
+                    """)
 
-            dot = QLabel()
-            dot.setFixedSize(8, 8)
-            dot.setStyleSheet(f"background-color: {status_color}; border-radius: 4px;")
+            h_layout = QHBoxLayout(item_widget)
+            h_layout.setContentsMargins(10, 0, 10, 0)
 
-            il.addWidget(name)
-            il.addStretch()
-            il.addWidget(dot)
+            # Левая часть
+            left_box = QHBoxLayout()
+            left_box.setSpacing(10)
+
+            # Аватар
+            avatar = QLabel(p["name"][0].upper())
+            avatar.setFixedSize(28, 28)
+            avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            avatar.setStyleSheet("""
+                        background-color: #374151; color: white; font-weight: bold; border-radius: 6px; border: none;
+                    """)
+            left_box.addWidget(avatar)
+
+            # Имя + Корона
+            name_text = p["name"]
+            # Определяем цвет имени
+            text_color = "#818cf8" if is_me else "#e5e7eb"  # Indigo / White
+
+            name_lbl = QLabel(name_text)
+            name_lbl.setStyleSheet(f"color: {text_color}; font-weight: 600; border: none; background: transparent;")
+            left_box.addWidget(name_lbl)
+
+            # --- ДОБАВЛЯЕМ КОРОНУ ---
+            if p["is_host"]:
+                crown = QLabel("👑")
+                crown.setStyleSheet("font-size: 14px; border: none; background: transparent;")
+                crown.setToolTip("Создатель комнаты")
+                left_box.addWidget(crown)
+            # ------------------------
+
+            h_layout.addLayout(left_box)
+            h_layout.addStretch()
+
+            # Правая часть: Статус
+            status_lbl = QLabel()
+            if p["ready"]:
+                status_lbl.setText("ГОТОВ")
+                status_lbl.setStyleSheet("""
+                            color: #4ade80; background-color: rgba(74, 222, 128, 0.1); 
+                            border: 1px solid rgba(74, 222, 128, 0.2); border-radius: 4px; padding: 3px 6px; font-weight: bold; font-size: 10px;
+                        """)
+            else:
+                status_lbl.setText("ЖДЕТ")
+                status_lbl.setStyleSheet("""
+                            color: #9ca3af; background-color: #1f2937;
+                            border: 1px solid #374151; border-radius: 4px; padding: 3px 6px; font-weight: bold; font-size: 10px;
+                        """)
+
+            h_layout.addWidget(status_lbl)
 
             item = QListWidgetItem(self.room_players_list)
             item.setSizeHint(item_widget.sizeHint())
             self.room_players_list.setItemWidget(item, item_widget)
 
-        # Игра
-        sel_game = data["selected_game"]
-        if sel_game:
-            # Находим название
-            title = next((g["title"] for g in GAMES_CONFIG if g["id"] == sel_game), "Неизвестно")
-            self.lbl_selected_game_name.setText(title)
-            self.lbl_selected_game_name.setStyleSheet("color: #e5e7eb; font-weight: bold; border: none;")
-            self.game_info_box.setStyleSheet(
-                "background-color: #312e81; border: 1px solid #4f46e5; border-radius: 12px;")  # Подсветка индиго
+        self.lbl_player_count.setText(f"{len(data['players'])}/8")
+
+        # Обновляем стиль кнопки "Готов"
+        self.update_ready_button_style(my_ready_status)
+
+    def update_ready_button_style(self, is_ready):
+        # Чтобы не вызывать бесконечный цикл сигналов
+        self.btn_ready.blockSignals(True)
+        # Мы используем это как флаг состояния, хоть кнопка и не checkable
+        # Но для стиля проще перезаписывать stylesheet
+
+        if is_ready:
+            self.btn_ready.setText("ВЫ ГОТОВЫ")
+            self.btn_ready.setStyleSheet("""
+                QPushButton {
+                    background-color: #16a34a; /* green-600 */
+                    color: white;
+                    border-radius: 12px;
+                    font-weight: bold;
+                    border: none;
+                }
+                QPushButton:hover { background-color: #22c55e; }
+            """)
         else:
-            self.lbl_selected_game_name.setText("Выберите игру слева")
-            self.lbl_selected_game_name.setStyleSheet("color: #9ca3af; font-weight: 500; border: none;")
-            self.game_info_box.setStyleSheet(
-                "background-color: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 12px;")
+            self.btn_ready.setText("ГОТОВ")
+            self.btn_ready.setStyleSheet("""
+                QPushButton {
+                    background-color: #2a2a4a;
+                    color: #d1d5db;
+                    border-radius: 12px;
+                    font-weight: bold;
+                    border: none;
+                }
+                QPushButton:hover { background-color: #35355a; }
+            """)
+        self.btn_ready.blockSignals(False)
 
     def toggle_ready(self):
-        status = self.btn_ready.isChecked()
-        self.btn_ready.setText("Я Готов!" if status else "Не готов")
-        self.network.send_json({"type": "toggle_ready", "status": status})
+        current_text = self.btn_ready.text()
+        new_status = (current_text == "ГОТОВ")
 
-    def send_chat_msg(self):
-        msg = self.chat_inp.text().strip()
-        if msg:
-            self.network.send_json({"type": "chat_msg", "text": msg})
-            self.chat_inp.clear()
-            # Добавляем в лог сразу (опционально, или ждать от сервера)
-            self.add_to_log(f"Вы: {msg}")
+        self.network.send_json({"type": "toggle_ready", "status": new_status})
 
     def set_game_status(self, is_running, game_title=""):
         if is_running:
@@ -1073,14 +1171,14 @@ class Launcher(OverlayWindow):
                 QTimer.singleShot(500, lambda: self.network.connect_to(ip, port))
 
     def on_connected(self):
-        self.network.send_json({"type": "login", "name": self.name_inp.text()})
+        self.network.send_json({"type": "login", "name": self.inp_name.text()})
         self.notifications.show("Сервер", "Подключено успешно!", "success")
         self.conn_indicator.setStyleSheet(self.style_connected)
         self.conn_indicator.setToolTip("Подключено")
 
     def on_disconnected(self):
         self.notifications.show("Сервер", "Соединение разорвано", "error")
-        self.stack.setCurrentIndex(0)
+        self.net_stack.setCurrentIndex(0)
         self.lobby_list_widget.clear()
         self.conn_indicator.setStyleSheet(self.style_disconnected)
         self.conn_indicator.setToolTip("Не подключено")
@@ -1099,7 +1197,7 @@ class Launcher(OverlayWindow):
 
         elif dtype == "kicked":
             self.notifications.show("Лобби", data["msg"], "warning")
-            self.stack.setCurrentIndex(0)
+            self.net_stack.setCurrentIndex(0)
             self.current_lobby_id = None
             self.deselect_all_games()
 
@@ -1107,7 +1205,7 @@ class Launcher(OverlayWindow):
             self.notifications.show("Ошибка", data["msg"], "error")
 
         elif dtype == "left_lobby_success":
-            self.stack.setCurrentIndex(0)
+            self.net_stack.setCurrentIndex(0)
             self.current_lobby_id = None
             self.deselect_all_games()
 
@@ -1172,18 +1270,7 @@ class Launcher(OverlayWindow):
 
     def update_name(self):
         if self.network.is_running:
-            self.network.send_json({"type": "login", "name": self.name_inp.text()})
-
-    # --- ЛОГИКА СПИСКА ЛОББИ ---
-    def update_lobby_list(self, lobbies):
-        self.lobby_list_widget.clear()
-        for l in lobbies:
-            lock = "🔒 " if l["private"] else ""
-            text = f"{lock}{l['name']} ({l['players']}/{l['max']})"
-            item = QListWidgetItem(text)
-            item.setData(Qt.ItemDataRole.UserRole, l["id"])  # Храним ID внутри
-            item.setData(Qt.ItemDataRole.UserRole + 1, l["private"])
-            self.lobby_list_widget.addItem(item)
+            self.network.send_json({"type": "login", "name": self.inp_name.text()})
 
     def on_lobby_double_click(self, item):
         lid = item.data(Qt.ItemDataRole.UserRole)
@@ -1205,81 +1292,35 @@ class Launcher(OverlayWindow):
             data = dlg.get_data()
             self.network.send_json({"type": "create_lobby", **data})
 
-    # --- ЛОГИКА ВНУТРИ КОМНАТЫ ---
-    def update_room_ui(self, data):
-        if self.current_lobby_id != data["lobby_id"]:
-            self.room_log.clear()
-
-        self.stack.setCurrentIndex(1)
-        self.current_lobby_id = data["lobby_id"]
-        self.is_host = data["am_i_host"]
-
-        self.name_inp.setEnabled(False)
-
-        self.room_title.setText(f"Комната: {data['name']}")
-
-        self.room_players.clear()
-        for p in data["players"]:
-            status = "✅ Готов" if p["ready"] else "⏳ Не готов"
-            host_mark = "👑 " if p["is_host"] else ""
-            text = f"{host_mark}{p['name']} - {status}"
-            self.room_players.addItem(text)
-
-            # Если это я, обновляем галочку (на всякий случай)
-            # if p["name"] == self.name_inp.text():
-            #     self.check_ready.blockSignals(True)
-            #     self.check_ready.setChecked(p["ready"])
-            #     self.check_ready.blockSignals(False)
-
-        # Выбор игры
-        sel_game = data["selected_game"]
-        if sel_game:
-            # Подсвечиваем
-            self.deselect_all_games()
-            if sel_game in self.game_cards:
-                self.game_cards[sel_game].set_selected(True)
-                title = GAMES_CONFIG[0]["title"]  # (ищем по id, тут упрощено)
-                for g in GAMES_CONFIG:
-                    if g["id"] == sel_game: title = g["title"]
-                self.lbl_selected_game.setText(f"Выбрана: {title}")
-                self.lbl_selected_game.setStyleSheet(
-                    "color: #2ecc71; font-weight: bold; background: transparent; border: none;")
-        else:
-            self.deselect_all_games()
-            self.lbl_selected_game.setText("Хост выбирает игру...")
-            self.lbl_selected_game.setStyleSheet("color: #aaa; background: transparent; border: none;")
-
-        # Управление доступностью
-        self.check_ready.setEnabled(True)
-        # Если игра не выбрана - нельзя быть готовым
-        if not sel_game:
-            self.check_ready.setChecked(False)
-            self.check_ready.setEnabled(False)
-
     def leave_lobby(self):
         self.network.send_json({"type": "leave_lobby"})
-        self.check_ready.setChecked(False)
-        self.name_inp.setEnabled(True)
+        self.btn_ready.setChecked(False)
+        self.inp_name.setEnabled(True)
 
     def send_ready_status(self, checked):
         self.network.send_json({"type": "toggle_ready", "status": checked})
 
     # --- КЛИКИ ПО ИГРАМ ---
     def on_game_click(self, game_data):
-        if self.current_lobby_id and self.is_game_running:
-            self.notifications.show("Игра идет", "Нельзя менять игру во время матча!", "warning")
+        if self.is_game_running:
+            self.notifications.show("Внимание", "Игра уже запущена", "warning")
             return
 
-        # 1. Если не в лобби - Оффлайн запуск
-        if not self.current_lobby_id:
+        if self.current_lobby_id:
+            # МЫ В ЛОББИ (ОНЛАЙН)
+            if self.is_host:
+                # Отправляем выбор игры на сервер
+                self.network.send_json({"type": "select_game", "game_id": game_data["id"]})
+            else:
+                self.notifications.show("Внимание", "Только хост выбирает игру", "warning")
+        else:
+            # МЫ НЕ В ЛОББИ (ОФФЛАЙН/СОЛО)
+            # Тут запускаем игру локально
             game_class = game_data["class"]
-            win = game_class()
+            win = game_class()  # is_online=False по умолчанию
             win.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            op = SettingsManager().get("window_opacity")
-            win.setWindowOpacity(op)
             win.show()
             self.add_active_game_widget(win, game_data["title"])
-            return
 
         # 2. Если в лобби
         if self.is_host:
@@ -1333,26 +1374,22 @@ class Launcher(OverlayWindow):
             self.active_game.close()
 
     def remove_active_game_widget(self, window_id):
-        if hasattr(self, 'running_games') and window_id in self.running_games:
-            w = self.running_games[window_id]
-            w.setParent(None)
-            w.deleteLater()
-            del self.running_games[window_id]
-
-        self.is_game_running = False  # Разблокируем выбор игр
 
         if self.active_game and id(self.active_game) == window_id:
             self.active_game = None
             self.active_game_id = None
+            self.is_game_running = False
 
-        # Если мы в лобби, снимаем готовность
-        if self.current_lobby_id:
-            self.check_ready.setChecked(False)  # Это автоматически отправит toggle_ready на сервер
-            self.notifications.show("Лобби", "Игра завершена. Статус: Не готов", "info")
-            self.add_to_log("Игра завершена")
+            # Сбрасываем статус внизу (Серая точка)
+            self.set_game_status(False)
+
+            # Снимаем готовность в лобби
+            if self.current_lobby_id:
+                self.btn_ready.setChecked(False)
+                self.notifications.show("Лобби", "Игра завершена. Статус: Не готов", "info")
+                self.add_to_log("Игра завершена")
 
     def add_to_log(self, message):
-        import datetime
         time_str = QDateTime.currentDateTime().toString("HH:mm:ss")
         item = QListWidgetItem(f"[{time_str}] {message}")
         self.room_log.addItem(item)
