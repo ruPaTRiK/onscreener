@@ -743,7 +743,38 @@ class Launcher(OverlayWindow):
         self.room_players_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         pr_layout.addWidget(self.room_players_list)
 
-        # 3. FOOTER (Кнопки)
+        # 3. Чат и лог
+        lbl_chat = QLabel("ЧАТ")
+        lbl_chat.setStyleSheet(
+            "color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-top: 5px;")
+        pr_layout.addWidget(lbl_chat)
+
+        self.room_log = QListWidget()
+        self.room_log.setStyleSheet(
+            "background: rgba(0, 0, 0, 0.2); border: 1px solid #2a2a4a; border-radius: 8px; color: #9ca3af; font-size: 11px;")
+        self.room_log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Автоскролл
+        self.room_log.model().rowsInserted.connect(self.room_log.scrollToBottom)
+        pr_layout.addWidget(self.room_log)
+
+        chat_box = QHBoxLayout()
+        self.chat_inp = QLineEdit()
+        self.chat_inp.setPlaceholderText("Сообщение...")
+        self.chat_inp.setStyleSheet(
+            "background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 8px; color: white; padding: 6px;")
+        self.chat_inp.returnPressed.connect(self.send_chat_msg)
+
+        btn_send = QPushButton("➤")
+        btn_send.setFixedSize(30, 30)
+        btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_send.clicked.connect(self.send_chat_msg)
+        btn_send.setStyleSheet("color: #818cf8; border: none; font-size: 16px;")
+
+        chat_box.addWidget(self.chat_inp)
+        chat_box.addWidget(btn_send)
+        pr_layout.addLayout(chat_box)
+
+        # 4. FOOTER (Кнопки)
         footer_container = QWidget()
         f_layout = QVBoxLayout(footer_container)
         f_layout.setContentsMargins(0, 16, 0, 0)  # mt-auto pt-4
@@ -1261,6 +1292,11 @@ class Launcher(OverlayWindow):
             emoji = data.get("emoji")
             self.add_to_log(f"Соперник: {emoji}")
 
+        elif dtype == "chat_msg":
+            sender = data.get("sender", "Неизвестный")
+            text = data.get("text", "")
+            self.add_to_log(f"{sender}: {text}")
+
     def on_client_data(self, data):
         if data.get("type") == "game_move" and self.active_game:
             self.process_log_entry(data, "Вы")
@@ -1299,6 +1335,16 @@ class Launcher(OverlayWindow):
 
     def send_ready_status(self, checked):
         self.network.send_json({"type": "toggle_ready", "status": checked})
+
+    def send_chat_msg(self):
+        text = self.chat_inp.text().strip()
+        if text:
+            if self.network.is_running:
+                self.network.send_json({"type": "chat_msg", "text": text})
+
+            self.add_to_log(f"Вы: {text}")
+
+            self.chat_inp.clear()
 
     # --- КЛИКИ ПО ИГРАМ ---
     def on_game_click(self, game_data):

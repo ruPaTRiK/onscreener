@@ -301,6 +301,25 @@ async def handle_client(reader, writer):
                             # Шлем новую команду restart_swap
                             await send_json(w, {"type": "restart_swap", "color": color})
 
+            # ЧАТ В ЛОББИ
+            elif ctype == "chat_msg":
+                lid = clients[writer]["current_lobby"]
+                if lid and lid in lobbies:
+                    lobby = lobbies[lid]
+                    sender_name = clients[writer]["name"]
+                    msg_text = data.get("text", "")
+
+                    # Формируем пакет для рассылки
+                    payload = {
+                        "type": "chat_msg",
+                        "sender": sender_name,
+                        "text": msg_text
+                    }
+
+                    for w in lobby.players:
+                        if w != writer:
+                            await send_json(w, payload)
+
     except Exception as e:
         print(f"Connection error with {addr}: {e}")
     finally:
