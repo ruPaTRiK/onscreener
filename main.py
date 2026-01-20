@@ -12,8 +12,7 @@ from core.update_dialog import UpdateProgressDialog
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGridLayout, QScrollArea, QFrame,
                              QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
-                             QCheckBox, QMessageBox, QButtonGroup, QGraphicsOpacityEffect,
-                             QGraphicsDropShadowEffect)
+                             QMessageBox, QButtonGroup, QGraphicsDropShadowEffect)
 from PyQt6.QtGui import QFont, QColor, QIcon
 from PyQt6.QtCore import Qt, QTimer, QDateTime, pyqtSignal, QPropertyAnimation, QEasingCurve, QPoint
 
@@ -511,7 +510,8 @@ class Launcher(OverlayWindow):
         header.setStyleSheet("""
                     QFrame {
                         background-color: #12122a;
-                        border-bottom: 1px solid #2a2a4a;
+                        border: 1px solid #2a2a4a;
+                        border-right: none;
                     }
                 """)
         header.setFixedHeight(70)  # p-6 (24px) ~ 70-80px
@@ -523,7 +523,7 @@ class Launcher(OverlayWindow):
         title_box.setSpacing(10)
 
         icon_lbl = QLabel("🌍")  # Заглушка SVG
-        icon_lbl.setStyleSheet("font-size: 18px; color: #818cf8;")  # indigo-400
+        icon_lbl.setStyleSheet("font-size: 18px; color: #818cf8; border: none")  # indigo-400
 
         title_lbl = QLabel("Мультиплеер")
         title_lbl.setFont(QFont("Arial", 12, QFont.Weight.Bold))  # text-lg font-bold
@@ -688,7 +688,7 @@ class Launcher(OverlayWindow):
 
         self.net_stack.addWidget(self.page_list)
 
-        # --- PAGE 2: INSIDE LOBBY (Дизайн по JS) ---
+        # --- PAGE 2: INSIDE LOBBY ---
         self.page_lobby = QWidget()
         pr_layout = QVBoxLayout(self.page_lobby)
         pr_layout.setContentsMargins(0, 0, 0, 0)
@@ -696,7 +696,8 @@ class Launcher(OverlayWindow):
 
         # 1. HEADER (Комната и Игра)
         header_container = QFrame()
-        header_container.setStyleSheet("border-bottom: 1px solid #2a2a4a; padding-bottom: 16px; margin-bottom: 10px;")
+        header_container.setStyleSheet("QFrame {padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid #2a2a4a;}"
+                                       "QFrame > * {padding-bottom: 2px; margin-bottom: 2px; border: none;}")
         hc_layout = QVBoxLayout(header_container)
         hc_layout.setContentsMargins(0, 0, 0, 0)
         hc_layout.setSpacing(4)
@@ -708,7 +709,7 @@ class Launcher(OverlayWindow):
 
         self.lbl_room_name = QLabel("Room Name")
         self.lbl_room_name.setFont(QFont("Arial", 14, QFont.Weight.Bold))  # text-lg
-        self.lbl_room_name.setStyleSheet("color: white; border: none;")
+        self.lbl_room_name.setStyleSheet("color: white; border: none; padding-left: 0px;")
         hc_layout.addWidget(self.lbl_room_name)
 
         # Строка с игрой
@@ -729,7 +730,7 @@ class Launcher(OverlayWindow):
         # Заголовок списка
         player_header = QHBoxLayout()
         lbl_p_title = QLabel("ИГРОКИ")
-        lbl_p_title.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px;")
+        lbl_p_title.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-bottom: 6px;")
         self.lbl_player_count = QLabel("0/8")
         self.lbl_player_count.setStyleSheet("color: #6b7280; font-size: 10px; font-weight: bold;")
         player_header.addWidget(lbl_p_title)
@@ -741,18 +742,23 @@ class Launcher(OverlayWindow):
         self.room_players_list = QListWidget()
         self.room_players_list.setStyleSheet("background: transparent; border: none; outline: none;")
         self.room_players_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.room_players_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.room_players_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         pr_layout.addWidget(self.room_players_list)
 
         # 3. Чат и лог
         lbl_chat = QLabel("ЧАТ")
         lbl_chat.setStyleSheet(
-            "color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-top: 5px;")
+            "color: #6b7280; font-size: 10px; font-weight: bold; letter-spacing: 1px; margin-top: 5px; margin-bottom: 6px;")
         pr_layout.addWidget(lbl_chat)
 
         self.room_log = QListWidget()
         self.room_log.setStyleSheet(
-            "background: rgba(0, 0, 0, 0.2); border: 1px solid #2a2a4a; border-radius: 8px; color: #9ca3af; font-size: 11px;")
+            "background: rgba(0, 0, 0, 0.2); border: 1px solid #2a2a4a; border-bottom: none;"
+            "border-top-left-radius: 10px; border-top-right-radius: 10px; color: #9ca3af; font-size: 11px;")
         self.room_log.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.room_log.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        self.room_log.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         # Автоскролл
         self.room_log.model().rowsInserted.connect(self.room_log.scrollToBottom)
         pr_layout.addWidget(self.room_log)
@@ -761,14 +767,16 @@ class Launcher(OverlayWindow):
         self.chat_inp = QLineEdit()
         self.chat_inp.setPlaceholderText("Сообщение...")
         self.chat_inp.setStyleSheet(
-            "background: #1a1a3a; border: 1px solid #2a2a4a; border-radius: 8px; color: white; padding: 6px;")
+            "background: #1a1a3a; border: 1px solid #2a2a4a; border-top: none; border-right: none;"
+            "border-bottom-left-radius: 10px; color: white; padding: 6px;")
         self.chat_inp.returnPressed.connect(self.send_chat_msg)
 
         btn_send = QPushButton("➤")
-        btn_send.setFixedSize(30, 30)
+        btn_send.setFixedSize(31, 31)
         btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_send.clicked.connect(self.send_chat_msg)
-        btn_send.setStyleSheet("color: #818cf8; border: none; font-size: 16px;")
+        btn_send.setStyleSheet("color: #818cf8; border: 1px solid #2a2a4a; border-top: none; border-left: none;"
+                               "border-bottom-right-radius: 10px; font-size: 24px;")
 
         chat_box.addWidget(self.chat_inp)
         chat_box.addWidget(btn_send)
@@ -873,10 +881,7 @@ class Launcher(OverlayWindow):
                     v_layout.setSpacing(2)
                     name_lbl = QLabel(l["name"])
                     name_lbl.setStyleSheet("color: #e5e7eb; font-weight: bold; border: none; background: transparent;")
-                    ping_lbl = QLabel("Ping: 5 ms")
-                    ping_lbl.setStyleSheet("color: #6b7280; font-size: 10px; border: none; background: transparent;")
                     v_layout.addWidget(name_lbl)
-                    v_layout.addWidget(ping_lbl)
                     h_layout.addLayout(v_layout)
 
                     h_layout.addStretch()
@@ -890,7 +895,7 @@ class Launcher(OverlayWindow):
                     count_lbl = QLabel(f"{l['players']}/{l['max']}")
                     count_lbl.setStyleSheet("""
                                 background-color: #12122a; color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.2);
-                                border-radius: 6px; padding: 4px 8px; font-size: 11px;
+                                border-radius: 6px; padding: 2px 8px; margin: 14px 0px; font-size: 11px;
                             """)
                     h_layout.addWidget(count_lbl)
 
@@ -951,11 +956,16 @@ class Launcher(OverlayWindow):
         # Ищем себя в списке для обновления кнопки
         my_ready_status = False
 
+        current_name = self.user_name
+
+        self.room_players_list.setSpacing(5)
+
         for p in data["players"]:
-            is_me = (p["name"] == self.inp_name.text())
+            is_me = (p["name"] == current_name)
 
             # Обновляем свою кнопку готовности, если данные пришли с сервера
             if is_me:
+                my_ready_status = p["ready"]
                 self.btn_ready.blockSignals(True)
                 self.btn_ready.setChecked(p["ready"])
                 self.btn_ready.setText("ВЫ ГОТОВЫ" if p["ready"] else "ГОТОВ")
@@ -1014,13 +1024,15 @@ class Launcher(OverlayWindow):
                 status_lbl.setText("ГОТОВ")
                 status_lbl.setStyleSheet("""
                             color: #4ade80; background-color: rgba(74, 222, 128, 0.1); 
-                            border: 1px solid rgba(74, 222, 128, 0.2); border-radius: 4px; padding: 3px 6px; font-weight: bold; font-size: 10px;
+                            border: 1px solid rgba(74, 222, 128, 0.2); border-radius: 4px; padding: 2px 8px; margin: 14px 0px;
+                            font-weight: bold; font-size: 10px;
                         """)
             else:
                 status_lbl.setText("ЖДЕТ")
                 status_lbl.setStyleSheet("""
                             color: #9ca3af; background-color: #1f2937;
-                            border: 1px solid #374151; border-radius: 4px; padding: 3px 6px; font-weight: bold; font-size: 10px;
+                            border: 1px solid #374151; border-radius: 4px; padding: 2px 8px; margin: 14px 0px;
+                            font-weight: bold; font-size: 10px;
                         """)
 
             h_layout.addWidget(status_lbl)
@@ -1236,9 +1248,16 @@ class Launcher(OverlayWindow):
             self.notifications.show("Ошибка", data["msg"], "error")
 
         elif dtype == "left_lobby_success":
-            self.net_stack.setCurrentIndex(0)
+            self.notifications.show("Лобби", "Вы покинули комнату", "info")
+
+            self.net_stack.setCurrentIndex(1)
+
             self.current_lobby_id = None
+            self.is_host = False
             self.deselect_all_games()
+
+            self.btn_ready.setChecked(False)
+            self.btn_ready.setText("ГОТОВ")
 
         # ЗАПУСК ИГРЫ
         elif dtype == "match_found":
@@ -1381,39 +1400,74 @@ class Launcher(OverlayWindow):
             card.set_selected(False)
 
     def launch_online_game(self, game_id, my_color):
-        game_conf = next((g for g in GAMES_CONFIG if g["id"] == game_id), None)
-        if game_conf:
+        print(f"DEBUG: Запуск игры {game_id} за {my_color}")
+
+        try:
+            game_conf = next((g for g in GAMES_CONFIG if g["id"] == game_id), None)
+            if not game_conf:
+                print(f"ERROR: Игра {game_id} не найдена в конфиге!")
+                return
+
             self.active_game_id = game_id
 
-            if self.room_log.count() > 0:
-                self.room_log.addItem(QListWidgetItem(""))
-                self.room_log.addItem(QListWidgetItem("--- НОВАЯ ИГРА ---"))
-                self.room_log.addItem(QListWidgetItem(""))
+            # Лог разделитель
+            if hasattr(self, 'room_log') and self.room_log is not None:
+                if self.room_log.count() > 0:
+                    self.room_log.addItem(QListWidgetItem(""))
+                    self.room_log.addItem(QListWidgetItem("--- НОВАЯ ИГРА ---"))
+                    self.room_log.addItem(QListWidgetItem(""))
 
             game_class = game_conf["class"]
-            # Внимание: is_host в игре значит "играю за белых".
-            # Это совпадает с my_color, который прислал сервер
             play_as_white = (my_color == 'white')
 
+            # Создание окна (тут может быть ошибка)
+            print("DEBUG: Создаю окно игры...")
             self.active_game = game_class(is_online=True, is_host=play_as_white, network_client=self.network)
+
+            # Настройки окна
             self.active_game.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-            op = SettingsManager().get("window_opacity")
-            self.active_game.setWindowOpacity(op)
+
+            # Прозрачность
+            try:
+                from core.settings import SettingsManager
+                op = SettingsManager().get("window_opacity")
+                self.active_game.setWindowOpacity(op)
+            except:
+                pass
+
+            # Показываем
             self.active_game.show()
+            print("DEBUG: Окно показано")
+
+            # Обновляем статус внизу
             self.add_active_game_widget(self.active_game, f"{game_conf['title']} (Online)")
 
             self.is_game_running = True
             self.add_to_log(f"Игра {game_conf['title']} началась!")
 
-    # --- СПИСОК ЗАПУЩЕННЫХ ---
+        except Exception as e:
+            print(f"CRITICAL ERROR IN LAUNCH_ONLINE_GAME: {e}")
+            import traceback
+            traceback.print_exc()
+            self.notifications.show("Ошибка запуска", str(e), "error")
+
     def add_active_game_widget(self, game_window, title):
-        if self.active_game:
-            self.active_game.close()
+        if self.active_game and self.active_game != game_window:
+            try:
+                self.active_game.close()
+            except:
+                pass
 
         self.active_game = game_window
+
         self.set_game_status(True, title)
 
-        game_window.destroyed.connect(lambda: self.set_game_status(False))
+        try:
+            game_window.destroyed.disconnect()
+        except:
+            pass
+
+        game_window.destroyed.connect(lambda: self.remove_active_game_widget(id(game_window)))
 
     def close_active_game(self):
         if self.active_game:

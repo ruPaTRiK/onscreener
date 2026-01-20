@@ -1,9 +1,8 @@
-from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QVBoxLayout, QMenu, QHBoxLayout, QPushButton
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QFont, QAction
-from PyQt6.QtCore import Qt, QTimer, QRect, QPoint
+from PyQt6.QtWidgets import QWidget, QLabel, QGridLayout, QVBoxLayout, QHBoxLayout
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QFont
+from PyQt6.QtCore import Qt, QTimer, QRect
 from core.base_window import OverlayWindow
 from games.tic_tac_toe.logic import TicTacToeLogic
-from core.emote_widget import FloatingEmote
 
 
 class DrawingAnimation(QWidget):
@@ -109,12 +108,6 @@ class TicTacToeGame(OverlayWindow):
 
         header_layout = QHBoxLayout()
         header_layout.addWidget(self.status_label)
-
-        self.btn_emote = QPushButton("😀")
-        self.btn_emote.setFixedSize(40, 40)
-        self.btn_emote.setStyleSheet("background: rgba(255,255,255,30); border-radius: 20px; font-size: 20px;")
-        self.btn_emote.clicked.connect(self.show_emote_menu)
-        header_layout.addWidget(self.btn_emote)
 
         self.main_layout.addLayout(header_layout)
 
@@ -291,10 +284,6 @@ class TicTacToeGame(OverlayWindow):
             self.logic.reset_game()
             self._update_ui()
 
-        if isinstance(message, dict) and message.get("type") == "game_emote":
-            emoji = message.get("emoji")
-            self.show_floating_emote(emoji, is_mine=False)
-
     def swap_sides(self, new_color):
         self.my_mark = 'X' if new_color == 'white' else 'O'
 
@@ -318,34 +307,3 @@ class TicTacToeGame(OverlayWindow):
     def finish_animation(self):
         self.hidden_cell = None
         self._update_ui()
-
-    def show_emote_menu(self):
-        menu = QMenu(self)
-        # Стиль меню
-        menu.setStyleSheet("""
-            QMenu { background-color: #2c3e50; color: white; border: 1px solid #555; }
-            QMenu::item { padding: 5px 20px; font-size: 24px; }
-            QMenu::item:selected { background-color: #34495e; }
-        """)
-
-        emojis = ["👍", "😂", "😭", "🤔", "😡", "GG"]
-        for em in emojis:
-            action = QAction(em, self)
-            action.triggered.connect(lambda ch, e=em: self.send_emote(e))
-            menu.addAction(action)
-
-        # Показываем под кнопкой
-        menu.exec(self.btn_emote.mapToGlobal(QPoint(0, self.btn_emote.height())))
-
-    def send_emote(self, emoji):
-        # Показываем у себя
-        self.show_floating_emote(emoji, is_mine=True)
-
-        # Отправляем
-        if self.is_online and self.network:
-            self.network.send_json({"type": "game_emote", "emoji": emoji})
-
-    def show_floating_emote(self, emoji, is_mine):
-        center = self.rect().center()
-
-        FloatingEmote(self, emoji, center)
