@@ -4,7 +4,6 @@ import json
 import urllib.request
 import threading
 import ssl
-from core.server_dialog import ServerSelectDialog
 
 from core.updater import AutoUpdater
 from core.update_dialog import UpdateProgressDialog
@@ -12,7 +11,8 @@ from core.update_dialog import UpdateProgressDialog
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QGridLayout, QScrollArea, QFrame,
                              QLineEdit, QStackedWidget, QListWidget, QListWidgetItem,
-                             QMessageBox, QButtonGroup, QGraphicsDropShadowEffect)
+                             QMessageBox, QButtonGroup, QGraphicsDropShadowEffect, QSlider,
+                             QCheckBox, QComboBox)
 from PyQt6.QtGui import QFont, QColor, QIcon
 from PyQt6.QtCore import Qt, QTimer, QDateTime, pyqtSignal, QPropertyAnimation, QEasingCurve, QPoint
 
@@ -23,7 +23,6 @@ from core.lobby_dialogs import CreateLobbyDialog, PasswordDialog
 from core.notifications import NotificationManager
 from games_config import GAMES_CONFIG
 
-from core.settings_panel import SettingsPanel
 from core.settings import SettingsManager
 from core.sound_manager import SoundManager
 
@@ -203,6 +202,7 @@ class Launcher(OverlayWindow):
 
         self.servers_list = []
         self.current_server_name = "Локальный"
+        self.is_connecting = False
 
         self.init_ui()
 
@@ -250,10 +250,7 @@ class Launcher(OverlayWindow):
         self.main_stack.addWidget(self.page_friends)
 
         # --- СТРАНИЦА 3: НАСТРОЙКИ ---
-        self.page_settings = QLabel("Раздел Настройки")
-        self.page_settings.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.page_settings.setStyleSheet("color: #6b7280; font-size: 24px;")
-        self.main_stack.addWidget(self.page_settings)
+        self.setup_settings_page()
 
     def setup_sidebar(self):
         self.sidebar_frame = QFrame()
@@ -1098,6 +1095,201 @@ class Launcher(OverlayWindow):
             card = GameCard(game, self.on_game_click)
             self.grid_layout.addWidget(card)
 
+
+    # --- НАСТРОЙКИ ---
+    def setup_settings_page(self):
+        self.page_settings = QWidget()
+        # Основной Layout страницы
+        main_layout = QVBoxLayout(self.page_settings)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_layout.setSpacing(30)
+
+        # Заголовок
+        lbl_title = QLabel("Настройки")
+        lbl_title.setFont(QFont("Arial", 24, QFont.Weight.Bold))
+        lbl_title.setStyleSheet("color: white;")
+        main_layout.addWidget(lbl_title)
+
+        # Скролл (на случай если настроек будет много)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("background: transparent; border: none;")
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        content_layout.setSpacing(40)
+
+        # === СЕКЦИЯ 1: ПРИЛОЖЕНИЕ ===
+        sec_app = self.create_settings_section("ПРИЛОЖЕНИЕ")
+        sec_app_layout = sec_app.layout()
+
+        # Громкость
+        sec_app_layout.addWidget(QLabel("Громкость звука", styleSheet="color: #ccc; font-size: 14px;"))
+        self.slider_vol = QSlider(Qt.Orientation.Horizontal)
+        self.slider_vol.setRange(0, 100)
+        self.slider_vol.setValue(int(SettingsManager().get("volume") * 100))
+        self.slider_vol.valueChanged.connect(self.update_volume)
+        # Стиль слайдера
+        self.slider_vol.setStyleSheet("""
+            QSlider::groove:horizontal { height: 4px; background: #333; border-radius: 2px; }
+            QSlider::sub-page:horizontal { background: #6366f1; border-radius: 2px; }
+            QSlider::handle:horizontal { background: white; width: 16px; margin: -6px 0; border-radius: 8px; }
+        """)
+        sec_app_layout.addWidget(self.slider_vol)
+
+        # Mute
+        self.check_mute = QCheckBox("Выключить звук")
+        self.check_mute.setChecked(SettingsManager().get("mute"))
+        self.check_mute.toggled.connect(self.update_mute)
+        self.check_mute.setStyleSheet("""
+            QCheckBox { color: white; font-size: 14px; spacing: 8px; }
+            QCheckBox::indicator { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #555; background: #1a1a3a; }
+            QCheckBox::indicator:checked { background: #6366f1; border-color: #6366f1; }
+        """)
+        sec_app_layout.addWidget(self.check_mute)
+
+        # Прозрачность
+        sec_app_layout.addWidget(
+            QLabel("Прозрачность окон игр", styleSheet="color: #ccc; font-size: 14px; margin-top: 10px;"))
+        self.slider_opacity = QSlider(Qt.Orientation.Horizontal)
+        self.slider_opacity.setRange(20, 100)
+        self.slider_opacity.setValue(int(SettingsManager().get("window_opacity") * 100))
+        self.slider_opacity.valueChanged.connect(self.update_opacity)
+        self.slider_opacity.setStyleSheet(self.slider_vol.styleSheet())
+        sec_app_layout.addWidget(self.slider_opacity)
+
+        content_layout.addWidget(sec_app)
+
+        # === СЕКЦИЯ 2: СЕТЬ ===
+        sec_net = self.create_settings_section("СЕТЬ И СЕРВЕРЫ")
+        net_layout = sec_net.layout()
+
+        # Выпадающий список серверов
+        net_layout.addWidget(QLabel("Сервер подключения", styleSheet="color: #ccc; font-size: 14px;"))
+        self.combo_servers = QComboBox()
+        self.combo_servers.setStyleSheet("""
+            QComboBox { padding: 10px; background: #1a1a3a; color: white; border: 1px solid #2a2a4a; border-radius: 8px; font-size: 14px; }
+            QComboBox::drop-down { border: none; }
+            QComboBox QAbstractItemView { background: #1a1a3a; color: white; selection-background-color: #6366f1; padding: 5px; }
+        """)
+        self.combo_servers.currentIndexChanged.connect(self.on_server_combo_changed)
+        net_layout.addWidget(self.combo_servers)
+
+        # Поле ручного ввода (скрыто по умолчанию)
+        self.inp_custom_ip = QLineEdit()
+        self.inp_custom_ip.setPlaceholderText("IP:PORT (например 127.0.0.1:5555)")
+        self.inp_custom_ip.setStyleSheet("""
+            QLineEdit { background: #1a1a3a; color: white; border: 1px solid #2a2a4a; border-radius: 8px; padding: 10px; }
+            QLineEdit:focus { border-color: #6366f1; }
+        """)
+        self.inp_custom_ip.hide()
+        net_layout.addWidget(self.inp_custom_ip)
+
+        # Кнопки управления сервером
+        btn_box = QHBoxLayout()
+        btn_refresh = QPushButton("🔄 Обновить список")
+        btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh.clicked.connect(self.fetch_server_list_and_connect)  # Переиспользуем логику
+        btn_refresh.setStyleSheet(
+            "color: #818cf8; background: transparent; border: none; text-align: left; font-weight: bold;")
+
+        btn_apply_server = QPushButton("Применить и Подключиться")
+        btn_apply_server.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_apply_server.clicked.connect(self.apply_server_change)
+        btn_apply_server.setStyleSheet("""
+            QPushButton { background-color: #2a2a4a; color: white; border-radius: 8px; padding: 10px 20px; font-weight: bold; border: 1px solid #2a2a4a; }
+            QPushButton:hover { background-color: #6366f1; border-color: #6366f1; }
+        """)
+
+        btn_box.addWidget(btn_refresh)
+        btn_box.addStretch()
+        btn_box.addWidget(btn_apply_server)
+        net_layout.addLayout(btn_box)
+
+        content_layout.addWidget(sec_net)
+
+        scroll.setWidget(content)
+        main_layout.addWidget(scroll)
+
+        # Добавляем страницу в стек (индекс 2, так как 0=Games, 1=Friends)
+        # Или индекс 3, если настройки были последними.
+        # В setup_sidebar у нас было: lambda: self.main_stack.setCurrentIndex(2)
+        # Значит добавляем как 3-й виджет.
+        self.main_stack.addWidget(self.page_settings)
+
+    def create_settings_section(self, title):
+        frame = QFrame()
+        frame.setStyleSheet("background-color: rgba(255,255,255,0.03); border-radius: 12px;")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        lbl = QLabel(title)
+        lbl.setStyleSheet("color: #6b7280; font-size: 12px; font-weight: bold; letter-spacing: 1px;")
+        layout.addWidget(lbl)
+
+        return frame
+
+    # --- ЛОГИКА НАСТРОЕК ---
+    def update_volume(self, val):
+        vol = val / 100.0
+        SettingsManager().set("volume", vol)
+        SoundManager().set_volume(vol)
+
+    def update_mute(self, checked):
+        SettingsManager().set("mute", checked)
+        SoundManager().muted = checked
+
+    def update_opacity(self, val):
+        opacity = val / 100.0
+        SettingsManager().set("window_opacity", opacity)
+        if self.active_game:
+            self.active_game.setWindowOpacity(opacity)
+
+    def on_server_combo_changed(self, index):
+        data = self.combo_servers.currentData()
+        if data == "custom":
+            self.inp_custom_ip.show()
+        else:
+            self.inp_custom_ip.hide()
+
+    def update_server_combo_ui(self, servers_data):
+        # Этот метод вызывается после скачивания списка (из finish_loading_servers)
+        self.combo_servers.blockSignals(True)
+        self.combo_servers.clear()
+
+        # Добавляем серверы
+        for s in servers_data:
+            ip_data = f"{s['ip']}:{s.get('port', 5555)}"
+            self.combo_servers.addItem(s['name'], ip_data)
+
+        self.combo_servers.addItem("Свой сервер...", "custom")
+
+        # Выбираем текущий активный (если есть в списке)
+        # Или первый по умолчанию
+        self.combo_servers.setCurrentIndex(0)
+        self.combo_servers.blockSignals(False)
+
+    def apply_server_change(self):
+        data = self.combo_servers.currentData()
+        ip, port = "", 5555
+
+        if data == "custom":
+            raw = self.inp_custom_ip.text().strip()
+            if ":" in raw:
+                ip, port = raw.split(":")
+                port = int(port)
+            else:
+                ip = raw
+        elif data:
+            ip, port = data.split(":")
+            port = int(port)
+
+        if ip:
+            self.notifications.show("Сервер", f"Переподключение к {ip}...", "info")
+            self.is_connecting = True
+            self.network.connect_to(ip, port)
+
     # --- СЕТЕВЫЕ СОБЫТИЯ ---
     def fetch_server_list_and_connect(self):
         def worker():
@@ -1191,35 +1383,43 @@ class Launcher(OverlayWindow):
 
         self.servers_list = servers
 
+        if hasattr(self, 'combo_servers'):
+            self.update_server_combo_ui(servers)
+
         if self.servers_list:
             srv = self.servers_list[0]
             ip = srv['ip']
             port = srv.get('port', 5555)
 
+            self.network.disconnect()
+
             self.notifications.show("Сервер", f"Подключение к: {srv['name']}...", "info")
-            self.network.connect_to(ip, port)
+            QTimer.singleShot(500, lambda: self.network.connect_to(ip, port))
         else:
             self.network.connect_to("127.0.0.1", 5555)
 
-    def open_server_dialog(self):
-        dlg = ServerSelectDialog(self, self.servers_list)
-        if dlg.exec():
-            ip = dlg.result_ip
-            port = dlg.result_port
-            if ip:
-                self.network.disconnect()  # Рвем старое
-
-                self.notifications.show("Сервер", f"Переподключение к {ip}...", "info")
-                # Небольшая задержка перед новым коннектом
-                QTimer.singleShot(500, lambda: self.network.connect_to(ip, port))
+    #def open_server_dialog(self):
+    #    dlg = ServerSelectDialog(self, self.servers_list)
+    #    if dlg.exec():
+    #        ip = dlg.result_ip
+    #        port = dlg.result_port
+    #        if ip:
+    #            self.network.disconnect()  # Рвем старое
+    #
+    #            self.notifications.show("Сервер", f"Переподключение к {ip}...", "info")
+    #            # Небольшая задержка перед новым коннектом
+    #            QTimer.singleShot(500, lambda: self.network.connect_to(ip, port))
 
     def on_connected(self):
+        self.is_connecting = False
         self.network.send_json({"type": "login", "name": self.inp_name.text()})
         self.notifications.show("Сервер", "Подключено успешно!", "success")
         self.conn_indicator.setStyleSheet(self.style_connected)
         self.conn_indicator.setToolTip("Подключено")
 
     def on_disconnected(self):
+        if self.is_connecting:
+            return
         self.notifications.show("Сервер", "Соединение разорвано", "error")
         self.net_stack.setCurrentIndex(0)
         self.lobby_list_widget.clear()

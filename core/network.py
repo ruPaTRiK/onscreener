@@ -26,7 +26,14 @@ class NetworkClient(QThread):
         # Если поток уже работает - останавливаем, чтобы перезапустить
         if self.isRunning():
             self.is_running = False
-            self.wait()  # Ждем остановки
+            if self.client:
+                try:
+                    # shutdown + close прерывают recv мгновенно
+                    self.client.shutdown(socket.SHUT_RDWR)
+                    self.client.close()
+                except:
+                    pass
+            self.quit()
 
         self.start()  # Запускает run()
 
