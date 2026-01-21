@@ -1219,7 +1219,8 @@ class Launcher(OverlayWindow):
 
     def create_settings_section(self, title):
         frame = QFrame()
-        frame.setStyleSheet("background-color: rgba(255,255,255,0.03); border-radius: 12px;")
+        frame.setStyleSheet("QFrame {background-color: rgba(255,255,255,0.03); border-radius: 12px;}"
+                            "QFrame > * {background-color: none}")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(15)
@@ -1580,27 +1581,22 @@ class Launcher(OverlayWindow):
                 self.notifications.show("Внимание", "Только хост выбирает игру", "warning")
         else:
             # МЫ НЕ В ЛОББИ (ОФФЛАЙН/СОЛО)
-            # Тут запускаем игру локально
             game_class = game_data["class"]
-            win = game_class()  # is_online=False по умолчанию
+            win = game_class()
             win.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+            op = SettingsManager().get("window_opacity")
+            if op is None: op = 1.0
+            win.setWindowOpacity(float(op))
+
             win.show()
             self.add_active_game_widget(win, game_data["title"])
-
-        # 2. Если в лобби
-        if self.is_host:
-            # Хост выбирает игру для всех
-            self.network.send_json({"type": "select_game", "game_id": game_data["id"]})
-        else:
-            # Гость не может выбирать
-            self.notifications.show("Внимание", "Только хост может выбирать игру", "warning")
 
     def deselect_all_games(self):
         for card in self.game_cards.values():
             card.set_selected(False)
 
     def launch_online_game(self, game_id, my_color):
-        print(f"DEBUG: Запуск игры {game_id} за {my_color}")
 
         try:
             game_conf = next((g for g in GAMES_CONFIG if g["id"] == game_id), None)
@@ -1620,8 +1616,6 @@ class Launcher(OverlayWindow):
             game_class = game_conf["class"]
             play_as_white = (my_color == 'white')
 
-            # Создание окна (тут может быть ошибка)
-            print("DEBUG: Создаю окно игры...")
             self.active_game = game_class(is_online=True, is_host=play_as_white, network_client=self.network)
 
             # Настройки окна
@@ -1637,7 +1631,6 @@ class Launcher(OverlayWindow):
 
             # Показываем
             self.active_game.show()
-            print("DEBUG: Окно показано")
 
             # Обновляем статус внизу
             self.add_active_game_widget(self.active_game, f"{game_conf['title']} (Online)")
